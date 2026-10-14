@@ -19,7 +19,7 @@ can leave a key held down, it can; fix it before merging.
 
 **2. The bridge is model-agnostic and game-agnostic.** Model choice is a config value.
 Game knowledge (bindings, actions, goals) lives in `profiles/*.yaml`. If you find yourself
-writing `if model == "moondream"` outside `brain/`, or a literal `"w"` outside a profile,
+writing `if model == "qwen3-vl:2b-instruct"` outside `brain/`, or a literal `"w"` outside a profile,
 stop.
 
 ---

@@ -8,9 +8,8 @@ PlayerTwo captures the screen, hands each frame to a vision model running on you
 (via [Ollama](https://ollama.com)), gets back one action, and performs it. No cloud, no
 fees: everything runs on your machine.
 
-> **Status:** Phase 1, capture and input. Screen capture, the input driver, the window
-> guard and the F12 kill switch are in place; the model adapter and the loop land in
-> Phases 2–3. See
+> **Status:** Phase 2, brain. Capture, input, the window guard, the F12 kill switch and the
+> Ollama model adapter are in place; the threaded loop that plays a game lands in Phase 3. See
 > [`CLAUDE.md`](CLAUDE.md#phases).
 
 ## How it works
@@ -21,8 +20,9 @@ fees: everything runs on your machine.
      +---------------------- ORCHESTRATOR -------------------------+
 ```
 
-- **Swappable brain.** The model is one line in `config/config.yaml`. Start with Moondream
-  (fast, crude), step up to Qwen3-VL 4B or Qwen2.5-VL 7B (smarter, slower).
+- **Swappable brain.** The model is one line in `config/config.yaml`. Start with Qwen3-VL 2B
+  (fast, crude), step up to Qwen3-VL 4B or Qwen2.5-VL 7B (smarter, slower). Use non-thinking
+  ("instruct") models: thinking models spend seconds reasoning before every answer.
 - **Per-game profiles.** Each game's actions, key bindings and goal live in
   `profiles/<game>.yaml`. A new game is a new file, not new code.
 - **Safe by default.** F12 kills everything and releases held keys. Input is only sent
@@ -47,7 +47,7 @@ python -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -e ".[dev]"
 
-ollama pull moondream
+ollama pull qwen3-vl:2b-instruct
 
 python -m playertwo --check
 ```
@@ -59,7 +59,7 @@ python -m venv .venv
 .venv\Scripts\activate.bat
 pip install -e ".[dev]"
 
-ollama pull moondream
+ollama pull qwen3-vl:2b-instruct
 
 python -m playertwo --check
 ```
@@ -88,6 +88,15 @@ python scripts\verify_phase1.py
 It captures a frame to `verify_phase1_frame.png`, then checks that input is dropped when
 Notepad isn't focused, released when Notepad loses focus, and released by F12. It only
 sends input while Notepad is focused.
+
+To measure the model (captures the screen, never sends input; Ollama must be running):
+
+```bat
+python scriptsenchmark_brain.py
+```
+
+It prints per-decision latency, the median and p90, decisions per second, and how many
+replies had to fall back to `wait`.
 
 Read [`CLAUDE.md`](CLAUDE.md), [`docs/coding-guidelines.md`](docs/coding-guidelines.md) and
 [`docs/git-workflow.md`](docs/git-workflow.md) before contributing. Work happens on
