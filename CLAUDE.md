@@ -14,6 +14,9 @@ conflict.
 3. **`docs/architecture.md`**: why the structure is what it is. Read before changing
    structure.
 4. **`docs/git-workflow.md`**: branches, commits, PR titles and descriptions.
+5. **`docs/roadmap.md`**: where the project is going. Each phase's goal, its "done" bar
+   and its status, plus what's parked and why. The phase table below is its short
+   version; keep the two in sync.
 
 **Append a dated entry to `project_memory.md` before every commit**, covering: what
 changed, why, decisions taken, and any known issue introduced or resolved. Do not skip
@@ -106,16 +109,25 @@ python scripts\benchmark_brain.py  # decision latency + reply quality, no input 
 
 ## Phases
 
-| Phase | Branch                         | Delivers                                                                                       |
-| ----- | ------------------------------ | ---------------------------------------------------------------------------------------------- |
-| 0     | `feat/scaffold/0`              | Repo, docs, rules, tooling, CI, interfaces, config + profile validation, action executor.     |
-| 1     | `feat/capture-input/1`         | Real dxcam capture, pydirectinput driver, foreground-window guard, F12 kill switch.            |
-| 2     | `feat/brain/2`                 | Ollama vision adapter (Qwen3-VL 2B): one frame in, one validated decision out. Latency measured. |
-| 3     | `feat/game-loop/3`             | Threaded capture → brain → hands loop. Plays a game end to end (badly).                        |
-| 4     | `feat/first-game/4`            | First real game profile + prompt iteration. Most play quality lives here.                      |
-| 5     | `feat/model-upgrades/5`        | Qwen3-VL 4B instruct, Qwen2.5-VL 7B. Benchmark decisions/sec vs. quality on the 3070 Ti.       |
-| 6     | `feat/optimize/6`              | Change-detection tuning, frame size, action persistence, structured state where available.    |
-| 7     | `feat/recording/7`             | Record frame + action pairs, for debugging and future fine-tuning of a small specialised model. |
+Short version of [`docs/roadmap.md`](docs/roadmap.md), which has each phase's done bar,
+the game ladder and what's parked. Keep the two in sync; reorder only with Liam's OK.
+
+| Phase | Branch                  | Delivers                                                                                   | Status  |
+| ----- | ----------------------- | ------------------------------------------------------------------------------------------ | ------- |
+| 0     | `feat/scaffold/0`       | Repo, docs, rules, tooling, CI, interfaces, config + profile validation, action executor. | Done    |
+| 1     | `feat/capture-input/1`  | dxcam capture, pydirectinput driver, foreground-window guard, F12 kill switch.             | Done    |
+| 2     | `feat/brain/2`          | Ollama vision adapter (qwen3-vl:2b-instruct, ~0.56 s/decision): one validated decision per frame. | Done    |
+| 3     | `feat/game-loop/3`      | Threaded capture → brain → hands loop, plus the terminal-input safety fix.                 | Done    |
+| 4     | `feat/testbed/4`        | Testbed game + Tier 1 short-term memory + Phase 3 review items. Level 1 success rate, with and without memory. | Next    |
+| 5     | `feat/model-upgrades/5` | qwen3-vl:4b-instruct, qwen2.5vl:7b, judged on testbed success per level, decisions/s, VRAM. | Planned |
+| 6     | `feat/optimize/6`       | Frame size, change detection, action persistence, judged on testbed numbers.               | Planned |
+| 7     | `feat/lessons/7`        | Lessons journal (Tier 2): failure detection → per-game lessons in the prompt. Level 5 (pit) success improves across runs. | Planned |
+| 8     | `feat/first-game/8`     | First real game: A Short Hike (fallback SuperTuxKart). Profile + prompt iteration.         | Planned |
+| 9     | `feat/recording/9`      | Record frame + human input pairs while Liam plays.                                         | Planned |
+| 10    | `feat/imitation/10`     | Imitation learning (Tier 3): LoRA fine-tune a small vision model on the recordings.        | Planned |
+
+Parked: reinforcement learning (Tier 4), game memory reading, online / anti-cheat games.
+Reasons in the roadmap.
 
 ## Known constraints (don't "fix" these)
 
