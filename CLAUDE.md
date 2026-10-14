@@ -97,7 +97,8 @@ pytest                    # tests
 python -m playertwo --check   # validate config + active profile, then exit
 python -m playertwo           # run (the loop lands in Phase 3)
 
-ollama pull moondream     # starter model
+ollama pull qwen3-vl:2b-instruct   # starter model (non-thinking)
+python scriptsenchmark_brain.py  # decision latency + reply quality, no input sent
 ```
 
 ## Phases
@@ -106,10 +107,10 @@ ollama pull moondream     # starter model
 | ----- | ------------------------------ | ---------------------------------------------------------------------------------------------- |
 | 0     | `feat/scaffold/0`              | Repo, docs, rules, tooling, CI, interfaces, config + profile validation, action executor.     |
 | 1     | `feat/capture-input/1`         | Real dxcam capture, pydirectinput driver, foreground-window guard, F12 kill switch.            |
-| 2     | `feat/brain/2`                 | Ollama + Moondream adapter: one frame in, one validated decision out. Latency measured.        |
+| 2     | `feat/brain/2`                 | Ollama vision adapter (Qwen3-VL 2B): one frame in, one validated decision out. Latency measured. |
 | 3     | `feat/game-loop/3`             | Threaded capture → brain → hands loop. Plays a game end to end (badly).                        |
 | 4     | `feat/first-game/4`            | First real game profile + prompt iteration. Most play quality lives here.                      |
-| 5     | `feat/model-upgrades/5`        | Qwen3-VL 4B, Qwen2.5-VL 7B. Benchmark decisions/sec vs. quality on the 3070 Ti.                |
+| 5     | `feat/model-upgrades/5`        | Qwen3-VL 4B instruct, Qwen2.5-VL 7B. Benchmark decisions/sec vs. quality on the 3070 Ti.       |
 | 6     | `feat/optimize/6`              | Change-detection tuning, frame size, action persistence, structured state where available.    |
 | 7     | `feat/recording/7`             | Record frame + action pairs, for debugging and future fine-tuning of a small specialised model. |
 

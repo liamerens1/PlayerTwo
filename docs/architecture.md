@@ -50,10 +50,21 @@ On an 8 GB card, the trade-off between smart and fast is the central constraint:
 
 | Model         | ~VRAM (Q4) | Role                                     |
 | ------------- | ---------- | ---------------------------------------- |
-| Moondream     | ~2 GB      | Start here. Fastest, crude play.         |
+| Qwen3-VL 2B   | ~1.9 GB    | Start here. ~0.6 s/decision, crude play. |
 | Qwen3-VL 4B   | ~3.3 GB    | Step up. Modern, long context.           |
 | Qwen2.5-VL 7B | ~5–6 GB    | Smarter, slower, tight fit.              |
 | MiniCPM-V 8B  | ~6 GB      | Alternative.                             |
+
+Use **non-thinking ("instruct") tags**, such as `qwen3-vl:2b-instruct`. Thinking variants
+write paragraphs of reasoning before every answer, and Ollama's `think: false` didn't stop
+it for `qwen3-vl:2b`. Moondream, the original starter, returns garbage on Ollama 0.40.x,
+even for text-only prompts, so it was dropped.
+
+Replies are constrained with a JSON schema (`format=`) whose `action` field is an enum of
+the profile's action names, and whose `reason` has a `maxLength`. The model can't produce
+an unknown action or run out of tokens mid-JSON. Replies are still validated afterwards.
+A missing model or a stopped Ollama server raises `BrainUnavailableError` (fail fast); a
+bad reply, a timeout or a server error becomes `wait`.
 
 The right answer changes with the game, the hardware and next month's model releases. So
 `GameModel` is an interface, Ollama serves whichever model `config.yaml` names, and nothing

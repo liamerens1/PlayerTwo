@@ -1,0 +1,175 @@
+import base64
+import io
+import json
+import logging
+from collections.abc import Callable
+from typing import Any
+
+import httpx
+import numpy as np
+import ollama
+import pytest
+from PIL import Image
+
+from playertwo.actions import GameProfile
+from playertwo.brain import BrainUnavailableError, OllamaVisionModel, encode_jpeg
+from playertwo.config import BrainSettings
+from playertwo.types import Frame
+
+Handler = Callable[[httpx.Request], httpx.Response]
+
+
+def _frame() -> Frame:
+    return np.full((36, 64, 3), (200, 40, 40), dtype=np.uint8)
+
+
+def _reply(text: str, **extra: Any) -> httpx.Response:
+    body = {
+        "model": "qwen3-vl:2b-instruct",
+        "response": text,
+        "done": True,
+        "load_duration": 1_000_000,
+        "prompt_eval_count": 1128,
+        "prompt_eval_duration": 410_000_000,
+        "eval_count": 22,
+        "eval_duration": 100_000_000,
+        **extra,
+    }
+    return httpx.Response(200, json=body)
+
+
+class FakeOllama:
+    """Records every request and answers with whatever `handler` returns."""
+
+    def __init__(self, handler: Handler) -> None:
+        self.requests: list[dict[str, Any]] = []
+        self._handler = handler
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        self.requests.append(json.loads(request.content or b"{}"))
+        return self._handler(request)
+
+
+def _model(handler: Handler, **settings: Any) -> tuple[OllamaVisionModel, FakeOllama]:
+    fake = FakeOllama(handler)
+    brain = BrainSettings(**settings)
+    client = ollama.Client(host=brain.host, transport=httpx.MockTransport(fake))
+    return OllamaVisionModel(brain, client=client), fake
+
+
+def test_valid_reply_becomes_decision(profile: GameProfile) -> None:
+    model, _ = _model(lambda _: _reply('{"action": "turn_left", "reason": "wall ahead"}'))
+    decision = model.decide(_frame(), profile)
+    assert decision.action == "turn_left"
+    assert decision.reason == "wall ahead"
+
+
+def test_request_carries_frame_prompt_schema_and_options(profile: GameProfile) -> None:
+    model, fake = _model(
+        lambda _: _reply('{"action": "wait", "reason": "x"}'),
+        temperature=0.3,
+        context_tokens=2048,
+        max_reply_tokens=48,
+        keep_alive="5m",
+    )
+    model.decide(_frame(), profile)
+
+    sent = fake.requests[0]
+    assert sent["model"] == "qwen3-vl:2b-instruct"
+    assert profile.goal in sent["system"]
+    assert sent["format"]["properties"]["action"]["enum"] == profile.action_names
+    assert sent["options"] == {"temperature": 0.3, "num_ctx": 2048, "num_predict": 48}
+    assert sent["keep_alive"] == "5m"
+    image = Image.open(io.BytesIO(base64.b64decode(sent["images"][0])))
+    assert image.format == "JPEG"
+    assert image.size == (64, 36)
+
+
+def test_timing_is_recorded(profile: GameProfile) -> None:
+    model, _ = _model(lambda _: _reply('{"action": "wait", "reason": "x"}'))
+    assert model.last_stats is None
+    model.decide(_frame(), profile)
+    stats = model.last_stats
+    assert stats is not None
+    assert stats.prompt_tokens == 1128
+    assert stats.prompt_seconds == pytest.approx(0.41)
+    assert stats.reply_tokens == 22
+    assert stats.reply_seconds == pytest.approx(0.1)
+    assert stats.total_seconds >= 0
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "",
+        "move forward please",
+        '{"reason": "no action key"}',
+        '{"action": 42}',
+        '{"action": "move_forward"',  # truncated by num_predict
+    ],
+)
+def test_unparseable_reply_becomes_wait(
+    profile: GameProfile, text: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    model, _ = _model(lambda _: _reply(text))
+    with caplog.at_level(logging.WARNING):
+        decision = model.decide(_frame(), profile)
+    assert decision.action == "wait"
+    assert "unparseable" in caplog.text
+
+
+def test_action_outside_profile_becomes_wait(profile: GameProfile) -> None:
+    model, _ = _model(lambda _: _reply('{"action": "delete_save", "reason": "chaos"}'))
+    assert model.decide(_frame(), profile).action == "wait"
+
+
+def test_server_error_becomes_wait(profile: GameProfile) -> None:
+    model, _ = _model(lambda _: httpx.Response(500, json={"error": "out of memory"}))
+    decision = model.decide(_frame(), profile)
+    assert decision.action == "wait"
+    assert decision.reason is not None and "out of memory" in decision.reason
+    assert model.last_stats is not None
+
+
+def test_timeout_becomes_wait(profile: GameProfile) -> None:
+    def slow(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("too slow", request=request)
+
+    model, _ = _model(slow)
+    assert model.decide(_frame(), profile).action == "wait"
+
+
+def test_missing_model_raises_unavailable(profile: GameProfile) -> None:
+    model, _ = _model(lambda _: httpx.Response(404, json={"error": "model not found"}))
+    with pytest.raises(BrainUnavailableError, match="ollama pull qwen3-vl:2b-instruct"):
+        model.decide(_frame(), profile)
+
+
+def test_server_down_raises_unavailable(profile: GameProfile) -> None:
+    def refused(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    model, _ = _model(refused)
+    with pytest.raises(BrainUnavailableError, match="Failed to connect to Ollama"):
+        model.decide(_frame(), profile)
+
+
+def test_warm_up_loads_model_without_a_prompt() -> None:
+    model, fake = _model(lambda _: _reply(""), keep_alive="15m")
+    model.warm_up()
+    # No prompt and no images: Ollama just loads the model and keeps it resident.
+    assert fake.requests == [
+        {"model": "qwen3-vl:2b-instruct", "stream": False, "keep_alive": "15m"}
+    ]
+
+
+def test_warm_up_reports_missing_model() -> None:
+    model, _ = _model(lambda _: httpx.Response(404, json={"error": "model not found"}))
+    with pytest.raises(BrainUnavailableError, match="not installed"):
+        model.warm_up()
+
+
+def test_encode_jpeg_round_trips_size() -> None:
+    data = encode_jpeg(_frame())
+    assert data[:2] == b"\xff\xd8"  # JPEG magic
+    assert Image.open(io.BytesIO(data)).size == (64, 36)

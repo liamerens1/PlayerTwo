@@ -66,7 +66,7 @@ Conventional, lowercase type, short description:
 
 ```
 feat: screen capture and input driver
-feat: ollama brain with moondream
+feat: ollama vision brain
 fix: stuck w key after kill switch
 ```
 
