@@ -3,7 +3,7 @@
 
 brain:
   provider: ollama
-  model: moondream            # swap to qwen3-vl:4b or qwen2.5vl:7b; nothing else changes
+  model: qwen3-vl:2b-instruct  # swap to qwen3-vl:4b-instruct or qwen2.5vl:7b; nothing else changes
   host: http://localhost:11434
   temperature: 0.2
   context_tokens: 4096

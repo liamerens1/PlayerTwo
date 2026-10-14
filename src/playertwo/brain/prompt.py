@@ -1,6 +1,12 @@
-"""Builds the system prompt from the active profile."""
+"""Builds what the model sees from the active profile."""
+
+from typing import Any
 
 from playertwo.actions import GameProfile
+
+FRAME_PROMPT = "This is the current screenshot. Choose the next action."
+REASON_MAX_CHARS = 80
+"""Caps the reason so a chatty model can't run out of reply tokens mid-JSON."""
 
 
 def build_system_prompt(profile: GameProfile) -> str:
@@ -14,5 +20,18 @@ def build_system_prompt(profile: GameProfile) -> str:
         f"Goal: {profile.goal}\n\n"
         f"Available actions:\n{action_lines}\n\n"
         "Reply with ONE action as JSON only, no other text:\n"
-        f'{{"action": {names}, "reason": "<a few words>"}}'
+        f'{{"action": {names}, "reason": "<at most 8 words>"}}'
     )
+
+
+def decision_schema(profile: GameProfile) -> dict[str, Any]:
+    """JSON schema for a reply. Ollama constrains decoding to it, so the model can only
+    produce one of the profile's action names. Replies are still validated afterwards."""
+    return {
+        "type": "object",
+        "properties": {
+            "action": {"type": "string", "enum": profile.action_names},
+            "reason": {"type": "string", "maxLength": REASON_MAX_CHARS},
+        },
+        "required": ["action", "reason"],
+    }
