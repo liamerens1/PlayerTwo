@@ -1,5 +1,7 @@
 # PlayerTwo
 
+[![CI](https://github.com/liamerens1/PlayerTwo/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/liamerens1/PlayerTwo/actions/workflows/ci.yml)
+
 Let a local AI vision model play your PC games through real keyboard and mouse input.
 
 PlayerTwo captures the screen, hands each frame to a vision model running on your own GPU

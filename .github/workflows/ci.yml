@@ -1,0 +1,57 @@
+# Lint, typecheck and test on every PR and on pushes to dev/main.
+# Windows, because PlayerTwo is Windows only (dxcam, pydirectinput, keyboard install here).
+# Nothing in CI touches the screen or sends input: hardware is tested through fakes, and
+# the live checks in scripts/ are run by hand.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [dev, main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: lint, typecheck, test (Python ${{ matrix.python-version }})
+    runs-on: windows-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: ruff check
+        run: ruff check .
+
+      - name: ruff format --check
+        run: ruff format --check .
+
+      - name: mypy (strict)
+        run: mypy
+
+      - name: pytest
+        run: pytest
+
+      - name: Validate config and profile
+        run: python -m playertwo --check
