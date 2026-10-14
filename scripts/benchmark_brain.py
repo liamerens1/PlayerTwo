@@ -27,7 +27,13 @@ from playertwo.config import Settings
 from playertwo.types import Frame
 
 ROOT = Path(__file__).resolve().parents[1]
-FALLBACK_REASONS = ("unparseable reply", "ollama error", "no reply within", "unknown action")
+FALLBACK_REASONS = (
+    "unparseable reply",
+    "ollama error",
+    "no reply within",
+    "connection error",
+    "unknown action",
+)
 """Reasons the adapter gives when it substitutes `wait` for a bad reply or failed call."""
 
 

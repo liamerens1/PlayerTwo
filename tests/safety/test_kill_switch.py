@@ -5,7 +5,7 @@ from types import ModuleType
 
 import pytest
 
-from playertwo.safety import KillSwitch, SafetyGate, WindowGuard
+from playertwo.safety import ForegroundWindow, KillSwitch, SafetyGate, WindowGuard
 
 
 class FakeKeyHookBackend:
@@ -122,8 +122,10 @@ def test_real_backend_hooks_the_key_itself(monkeypatch: pytest.MonkeyPatch) -> N
 
 def test_safety_gate_needs_armed_switch_and_focused_window() -> None:
     switch, _, _, _ = _kill_switch()
-    focused = WindowGuard("Notepad", title_provider=lambda: "Untitled - Notepad")
-    unfocused = WindowGuard("Notepad", title_provider=lambda: "Command Prompt")
+    notepad = ForegroundWindow("Untitled - Notepad", "notepad.exe")
+    terminal = ForegroundWindow("Command Prompt", "cmd.exe")
+    focused = WindowGuard("Notepad", window_provider=lambda: notepad)
+    unfocused = WindowGuard("Notepad", window_provider=lambda: terminal)
 
     assert not SafetyGate(switch, focused).allows_input()
     switch.arm()

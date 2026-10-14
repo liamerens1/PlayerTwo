@@ -22,6 +22,10 @@ class BrainSettings(_Section):
     context_tokens: int = Field(default=4096, gt=0)
     max_reply_tokens: int = Field(default=64, ge=8, le=1024)
     timeout_seconds: float = Field(default=10, gt=0)
+    warm_up_timeout_seconds: float = Field(default=120, gt=0)
+    """Loading a 4B/7B model cold can take far longer than one decision may."""
+    max_consecutive_failures: int = Field(default=5, ge=1, le=1000)
+    """This many bad replies or failed calls in a row stop the loop (BrainUnavailableError)."""
     keep_alive: str = "30m"
 
     @field_validator("model")
@@ -49,11 +53,21 @@ class CaptureSettings(_Section):
     width: int = Field(default=640, ge=64, le=3840)
     fps: int = Field(default=30, ge=1, le=240)
     change_threshold: float = Field(default=8.0, ge=0, le=255)
+    republish_seconds: float = Field(default=2.0, gt=0)
+    """Re-send the last frame after this long without a change, so a static scene still
+    gets decisions instead of stalling the loop."""
 
 
 class SafetySettings(_Section):
     kill_switch: str = "f12"
+    target_process: str = ""
+    """Executable of the game, e.g. "game.exe". The reliable way to target a game."""
     target_window: str = ""
+    """Optional title substring, checked as well if set. Titles are easy to match by
+    accident (a terminal's title contains the command line that started PlayerTwo)."""
+    focus_settle_seconds: float = Field(default=0.5, ge=0, le=10)
+    """Input starts only after the target window has been focused this long. A key-down
+    sent while a window is still activating is lost (found in Phase 1)."""
 
     @field_validator("kill_switch")
     @classmethod
@@ -66,6 +80,11 @@ class SafetySettings(_Section):
         return key
 
 
+class LoopSettings(_Section):
+    max_decision_age_seconds: float = Field(default=1.5, gt=0, le=30)
+    """Hands drops a decision whose frame was captured longer ago than this."""
+
+
 class LoggingSettings(_Section):
     level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
 
@@ -75,6 +94,7 @@ class Settings(_Section):
     capture: CaptureSettings = CaptureSettings()
     profile: Path = Path("profiles/simple-walker.yaml")
     safety: SafetySettings = SafetySettings()
+    loop: LoopSettings = LoopSettings()
     logging: LoggingSettings = LoggingSettings()
 
     @classmethod

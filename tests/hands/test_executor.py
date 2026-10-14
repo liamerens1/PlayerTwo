@@ -129,3 +129,13 @@ def test_kill_switch_racing_key_down_still_releases(profile: GameProfile) -> Non
     executor = ActionExecutor(driver, profile, stop, FakeGate())
     executor.execute(Decision(action="move_forward"))
     assert driver.calls[-1] == ("up", "w")
+
+
+def test_execute_reports_whether_the_action_ran(profile: GameProfile) -> None:
+    executor, _, stop = _executor(profile)
+    assert executor.execute(Decision(action="interact")) is True
+    assert executor.execute(Decision(action="wait")) is True
+    closed, _, _ = _executor(profile, FakeGate(open_=False))
+    assert closed.execute(Decision(action="interact")) is False
+    stop.set()
+    assert executor.execute(Decision(action="interact")) is False

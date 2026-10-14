@@ -39,8 +39,10 @@ running. Models are a config value; games are profile files. See `docs/architect
   registered. Stopping releases every held key and mouse button. PlayerTwo drives the real
   keyboard and mouse; a runaway loop with W held down is the failure mode to design against.
 - **Input only goes to the game window.** Before every action, check the foreground window
-  matches `safety.target_window`. If it doesn't, drop the action. Alt-tabbing out must make
-  PlayerTwo harmless.
+  belongs to `safety.target_process` (and matches `safety.target_window` if set). If it
+  doesn't, drop the action. Terminals and shells never match: their titles contain the
+  command line, so a title-only target matched the terminal and typed into it in Phase 3.
+  Alt-tabbing out must make PlayerTwo harmless.
 - **Offline single-player only.** Never run against a game with anti-cheat or online play.
   Injected input can get an account flagged or banned.
 - **Model output is untrusted input.** Validate every decision with Pydantic against the
@@ -95,10 +97,11 @@ mypy                      # strict typecheck
 pytest                    # tests
 
 python -m playertwo --check   # validate config + active profile, then exit
-python -m playertwo           # run (the loop lands in Phase 3)
+python -m playertwo --target-process game.exe   # play; F12 stops, alt-tab pauses
+python -m playertwo --target-process notepad.exe --max-seconds 30   # safe live test
 
 ollama pull qwen3-vl:2b-instruct   # starter model (non-thinking)
-python scriptsenchmark_brain.py  # decision latency + reply quality, no input sent
+python scripts\benchmark_brain.py  # decision latency + reply quality, no input sent
 ```
 
 ## Phases

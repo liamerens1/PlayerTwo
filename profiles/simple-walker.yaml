@@ -3,6 +3,7 @@
 
 name: simple-walker
 description: Generic third-person walking and talking. Placeholder until the first real game is picked.
+game_type: third-person video game   # optional; the prompt says "a character in a <game_type>"
 goal: Explore forward, follow paths, and interact with anything highlighted.
 max_hold_seconds: 1.5
 

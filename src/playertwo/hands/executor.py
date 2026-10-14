@@ -43,16 +43,18 @@ class ActionExecutor:
         self._held: set[str] = set()
         self._lock = threading.Lock()
 
-    def execute(self, decision: Decision) -> None:
+    def execute(self, decision: Decision) -> bool:
+        """Perform the decision. False if it was dropped (stopped, or the gate is closed);
+        a `wait` counts as performed."""
         if self._stop.is_set():
-            return
+            return False
         decision = decision.validated_against(self._profile)
         spec = self._profile.actions[decision.action]
         if isinstance(spec, WaitAction):
-            return
+            return True
         if not self._gate.allows_input():
             logger.debug("dropped %s: input gate closed", decision.action)
-            return
+            return False
         logger.debug("executing %s (%s)", decision.action, decision.reason)
 
         match spec:
@@ -62,6 +64,7 @@ class ActionExecutor:
                 self._driver.press(key)
             case MouseAction(dx=dx, dy=dy):
                 self._driver.move_mouse(dx, dy)
+        return True
 
     def release_all(self) -> None:
         """Release every key this executor holds. Called by the kill switch."""

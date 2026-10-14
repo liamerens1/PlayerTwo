@@ -17,6 +17,8 @@ class GameProfile(BaseModel):
 
     name: str
     description: str = ""
+    game_type: str = "third-person video game"
+    """How the model is told what it's playing: "You control a character in a <game_type>"."""
     goal: str
     max_hold_seconds: float = Field(default=1.5, gt=0)
     actions: dict[str, ActionSpec]
