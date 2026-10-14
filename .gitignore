@@ -27,7 +27,7 @@ config/config.local.yaml
 # Output of scripts/verify_phase1.py
 verify_phase1_frame.png
 
-# Recorded gameplay (Phase 7): large, personal, never committed.
+# Recorded gameplay (Phase 9): large, personal, never committed.
 recordings/
 
 *.log

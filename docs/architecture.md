@@ -105,8 +105,9 @@ seconds ago. So every stage always works on the **newest** value and old ones ar
 
 ## Deferred, with reasons
 
-- **Fine-tuned / specialised model**: the long-term route to good real-time play, but it
-  needs recorded gameplay first (Phase 7) and a working loop to justify it.
+- **Fine-tuned / specialised model**: the long-term route to good real-time play. Needs
+  recorded gameplay first (Phase 9); imitation learning is Phase 10. Reinforcement
+  learning is parked: see [`roadmap.md`](roadmap.md#parked).
 - **Structured game state** (mod APIs, logs): game-specific; added per game when available.
 - **Game memory reading**: off by default (see `CLAUDE.md`).
 

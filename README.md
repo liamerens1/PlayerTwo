@@ -8,9 +8,9 @@ PlayerTwo captures the screen, hands each frame to a vision model running on you
 (via [Ollama](https://ollama.com)), gets back one action, and performs it. No cloud, no
 fees: everything runs on your machine.
 
-> **Status:** Phase 3, game loop. Capture, brain and hands run on their own threads and
-> play end to end. Not yet tuned for any real game; the first game profile is Phase 4. See
-> [`CLAUDE.md`](CLAUDE.md#phases).
+> **Status:** Phases 0–3 done: capture, brain and hands run on their own threads and play
+> end to end, verified against Notepad. Next is Phase 4, a testbed game that scores play;
+> the first real game is Phase 8. See the [roadmap](docs/roadmap.md).
 
 ## How it works
 
@@ -120,8 +120,9 @@ python scripts\benchmark_brain.py
 It prints per-decision latency, the median and p90, decisions per second, and how many
 replies had to fall back to `wait`.
 
-Read [`CLAUDE.md`](CLAUDE.md), [`docs/coding-guidelines.md`](docs/coding-guidelines.md) and
-[`docs/git-workflow.md`](docs/git-workflow.md) before contributing. Work happens on
+Read [`CLAUDE.md`](CLAUDE.md), [`docs/coding-guidelines.md`](docs/coding-guidelines.md),
+[`docs/git-workflow.md`](docs/git-workflow.md) and [`docs/roadmap.md`](docs/roadmap.md)
+before contributing. Work happens on
 `feat/<short-description>/<phase>` or `fix/<short-description>` branches, merged into
 `dev` by PR.
 

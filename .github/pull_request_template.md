@@ -27,7 +27,8 @@ docs/memory/project_memory.md. -->
 
 <!-- Concrete steps and the expected result. "Run `python -m playertwo --check`, it prints
 the profile's 5 actions", not "tested locally". Anything touching real input or capture
-needs a live check, and says what was tested against (Notepad, not a game, until Phase 4). -->
+needs a live check, and says what was tested against (Notepad or the testbed; no commercial
+game before Phase 8). -->
 
 1. `ruff check .` → `All checks passed!`
 2. `ruff format --check .` → all files already formatted
