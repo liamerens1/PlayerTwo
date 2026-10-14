@@ -28,6 +28,10 @@ dev = [
     "pytest>=8.3",
     "types-PyYAML>=6.0",
 ]
+# The test game (python -m testbed). Never needed by PlayerTwo itself.
+testbed = [
+    "ursina>=8.2",
+]
 
 [project.scripts]
 playertwo = "playertwo.app:main"
@@ -39,7 +43,7 @@ packages = ["src/playertwo"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-src = ["src", "tests"]
+src = ["src", "tests", "."]
 
 [tool.ruff.lint]
 select = [
@@ -59,15 +63,17 @@ select = [
 "tests/**" = ["ANN"]
 "src/playertwo/app.py" = ["T20"]  # CLI entry point is the one place print is allowed
 "scripts/**" = ["T20"]  # manual verification scripts talk to the person running them
+"testbed/cli.py" = ["T20"]  # the test game's console is its scoreboard
+"testbed/game.py" = ["T20", "ANN401"]  # same; and Ursina is untyped, so its objects are Any
 
 [tool.ruff.lint.isort]
-known-first-party = ["playertwo"]
+known-first-party = ["playertwo", "testbed"]
 
 # ---------------------------------------------------------------- mypy
 [tool.mypy]
 python_version = "3.12"
 strict = true
-files = ["src", "tests", "scripts"]
+files = ["src", "tests", "scripts", "testbed"]
 plugins = ["pydantic.mypy"]
 
 # Windows-only libraries without type stubs. Imported lazily; see coding guidelines.
@@ -75,7 +81,14 @@ plugins = ["pydantic.mypy"]
 module = ["dxcam", "dxcam.*", "pydirectinput", "keyboard"]
 ignore_missing_imports = true
 
+# Ursina and Panda3D (testbed only) ship no type information.
+[[tool.mypy.overrides]]
+module = ["ursina", "ursina.*", "panda3d", "panda3d.*"]
+ignore_missing_imports = true
+
 # ---------------------------------------------------------------- pytest
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# The testbed package lives at the repo root, next to src/.
+pythonpath = ["."]
 addopts = "-ra"

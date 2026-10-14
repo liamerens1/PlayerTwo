@@ -27,6 +27,9 @@ config/config.local.yaml
 # Output of scripts/verify_phase1.py
 verify_phase1_frame.png
 
+# Testbed episode results (python -m testbed): one .jsonl per run, kept locally.
+testbed/results/
+
 # Recorded gameplay (Phase 9): large, personal, never committed.
 recordings/
 
