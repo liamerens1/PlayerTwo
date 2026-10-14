@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class _Section(BaseModel):
@@ -29,6 +29,16 @@ class CaptureSettings(_Section):
 class SafetySettings(_Section):
     kill_switch: str = "f12"
     target_window: str = ""
+
+    @field_validator("kill_switch")
+    @classmethod
+    def _single_key(cls, key: str) -> str:
+        # The kill switch hooks one key's press so it fires whatever else is held down;
+        # combos like ctrl+f12 can't work that way.
+        key = key.strip().lower()
+        if not key or "+" in key or "," in key:
+            raise ValueError("kill_switch must be a single key name, e.g. 'f12'")
+        return key
 
 
 class LoggingSettings(_Section):

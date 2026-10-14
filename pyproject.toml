@@ -16,7 +16,7 @@ dependencies = [
     "ollama>=0.4",
     # Windows-only. Imported lazily inside the concrete classes that need them, so pure
     # logic and tests still run on any OS. See docs/coding-guidelines.md section 9.
-    "dxcam>=0.0.5; sys_platform == 'win32'",
+    "dxcam>=0.3.0; sys_platform == 'win32'",
     "pydirectinput>=1.0.4; sys_platform == 'win32'",
     "keyboard>=0.13.5; sys_platform == 'win32'",
 ]
@@ -58,6 +58,7 @@ select = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["ANN"]
 "src/playertwo/app.py" = ["T20"]  # CLI entry point is the one place print is allowed
+"scripts/**" = ["T20"]  # manual verification scripts talk to the person running them
 
 [tool.ruff.lint.isort]
 known-first-party = ["playertwo"]
@@ -66,7 +67,7 @@ known-first-party = ["playertwo"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
-files = ["src", "tests"]
+files = ["src", "tests", "scripts"]
 plugins = ["pydantic.mypy"]
 
 # Windows-only libraries without type stubs. Imported lazily; see coding guidelines.

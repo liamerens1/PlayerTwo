@@ -24,6 +24,9 @@ Thumbs.db
 config/config.local.yaml
 .env
 
+# Output of scripts/verify_phase1.py
+verify_phase1_frame.png
+
 # Recorded gameplay (Phase 7): large, personal, never committed.
 recordings/
 

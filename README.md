@@ -6,8 +6,9 @@ PlayerTwo captures the screen, hands each frame to a vision model running on you
 (via [Ollama](https://ollama.com)), gets back one action, and performs it. No cloud, no
 fees: everything runs on your machine.
 
-> **Status:** Phase 0, scaffold. The structure, rules, config and safety-critical executor
-> are in place; capture, the model adapter and the loop land in Phases 1–3. See
+> **Status:** Phase 1, capture and input. Screen capture, the input driver, the window
+> guard and the F12 kill switch are in place; the model adapter and the loop land in
+> Phases 2–3. See
 > [`CLAUDE.md`](CLAUDE.md#phases).
 
 ## How it works
@@ -37,6 +38,8 @@ Details in [`docs/architecture.md`](docs/architecture.md).
 
 ## Setup
 
+PowerShell:
+
 ```powershell
 python -m venv .venv
 .venv\Scripts\Activate.ps1
@@ -47,6 +50,22 @@ ollama pull moondream
 python -m playertwo --check
 ```
 
+Command Prompt (`cmd.exe`): identical except for activating the venv:
+
+```bat
+python -m venv .venv
+.venv\Scripts\activate.bat
+pip install -e ".[dev]"
+
+ollama pull moondream
+
+python -m playertwo --check
+```
+
+Every other command in this repo (`ruff`, `mypy`, `pytest`, `git`, `python ...`) is the
+same in both shells. Where the docs chain commands with `;` (PowerShell), use `&&` in
+Command Prompt.
+
 ## Development
 
 ```powershell
@@ -55,6 +74,18 @@ ruff format .
 mypy
 pytest
 ```
+
+### Live checks
+
+Some code drives real hardware and can only be verified by hand (it opens Notepad if needed):
+
+```bat
+python scripts\verify_phase1.py
+```
+
+It captures a frame to `verify_phase1_frame.png`, then checks that input is dropped when
+Notepad isn't focused, released when Notepad loses focus, and released by F12. It only
+sends input while Notepad is focused.
 
 Read [`CLAUDE.md`](CLAUDE.md), [`docs/coding-guidelines.md`](docs/coding-guidelines.md) and
 [`docs/git-workflow.md`](docs/git-workflow.md) before contributing. Work happens on
