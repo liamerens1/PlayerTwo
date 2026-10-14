@@ -207,7 +207,8 @@ class GameLoop:
         # Act, then look: wait until the last action has finished and settled, then take
         # the screen as it is now. Deciding on a frame from before the last action ran
         # made the model repeat it (it kept turning left past the target).
-        if not self._result_ready.wait(timeout=SLOT_TIMEOUT_SECONDS):
+        # Stopping cuts the last action short and wakes the brain: don't decide again.
+        if not self._result_ready.wait(timeout=SLOT_TIMEOUT_SECONDS) or self._stop.is_set():
             return None
         timed = self._screen.get()
         if timed is None or timed.captured_at < self._acted_at:

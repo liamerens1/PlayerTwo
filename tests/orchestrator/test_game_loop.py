@@ -345,7 +345,9 @@ def test_act_then_look_waits_for_each_action_to_finish(profile: GameProfile) -> 
     _run_for(loop, stop, 0.8)
     assert len(model.started) >= 3
     gaps = [b - a for a, b in itertools.pairwise(model.started)]
-    assert min(gaps) >= 0.1 + 0.05 - 0.01  # the hold, then the settle
+    # The hold, then the settle; less two 15.6 ms ticks for coarse Windows timers on CI.
+    # Deciding without waiting (the old behaviour) gives gaps near 0.
+    assert min(gaps) >= 0.1 + 0.05 - 0.032
     assert loop.stats.decisions_skipped == 0  # nothing decided that hands then threw away
 
 
@@ -357,9 +359,10 @@ def test_act_then_look_decides_on_a_screen_captured_after_the_action(
     model = TimedModel("move_forward")
     loop, _, stop = _loop(hold, source=source, model=model, settle=0.05)
     _run_for(loop, stop, 0.6)
-    # Capture runs at 100 fps: a hold plus settle (0.1 s) is about 10 grabs apart.
+    # Capture runs at 100 fps: a hold plus settle (0.1 s) is about 10 grabs apart (7 seen
+    # on a busy CI runner). Deciding without waiting gives jumps of 0-1.
     jumps = [b - a for a, b in itertools.pairwise(model.frames)]
-    assert jumps and min(jumps) >= 8
+    assert jumps and min(jumps) >= 5
 
 
 def test_act_then_look_keeps_going_when_actions_are_dropped(profile: GameProfile) -> None:
