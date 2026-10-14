@@ -7,7 +7,6 @@ from typing import Any
 
 import httpx
 import numpy as np
-import ollama
 import pytest
 from PIL import Image
 
@@ -43,18 +42,18 @@ class FakeOllama:
 
     def __init__(self, handler: Handler) -> None:
         self.requests: list[dict[str, Any]] = []
+        self.read_timeouts: list[float] = []
         self._handler = handler
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(json.loads(request.content or b"{}"))
+        self.read_timeouts.append(request.extensions["timeout"]["read"])
         return self._handler(request)
 
 
 def _model(handler: Handler, **settings: Any) -> tuple[OllamaVisionModel, FakeOllama]:
     fake = FakeOllama(handler)
-    brain = BrainSettings(**settings)
-    client = ollama.Client(host=brain.host, transport=httpx.MockTransport(fake))
-    return OllamaVisionModel(brain, client=client), fake
+    return OllamaVisionModel(BrainSettings(**settings), transport=httpx.MockTransport(fake)), fake
 
 
 def test_valid_reply_becomes_decision(profile: GameProfile) -> None:
@@ -173,3 +172,97 @@ def test_encode_jpeg_round_trips_size() -> None:
     data = encode_jpeg(_frame())
     assert data[:2] == b"\xff\xd8"  # JPEG magic
     assert Image.open(io.BytesIO(data)).size == (64, 36)
+
+
+OK_REPLY = '{"action": "interact", "reason": "door"}'
+
+
+def _raises(error: type[httpx.TransportError]) -> Handler:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise error("simulated", request=request)
+
+    return handler
+
+
+# 1. warm-up: longer timeout, and a timeout is fatal rather than a wait
+
+
+def test_warm_up_uses_its_own_longer_timeout(profile: GameProfile) -> None:
+    model, fake = _model(lambda _: _reply(OK_REPLY), timeout_seconds=10, warm_up_timeout_seconds=90)
+    model.warm_up()
+    model.decide(_frame(), profile)
+    assert fake.read_timeouts == [90, 10]
+
+
+def test_warm_up_timeout_raises_unavailable() -> None:
+    model, _ = _model(_raises(httpx.ReadTimeout), warm_up_timeout_seconds=5)
+    with pytest.raises(BrainUnavailableError, match="did not load within 5"):
+        model.warm_up()
+
+
+def test_warm_up_dropped_connection_raises_unavailable() -> None:
+    model, _ = _model(_raises(httpx.RemoteProtocolError))
+    with pytest.raises(BrainUnavailableError, match="dropped the connection"):
+        model.warm_up()
+
+
+# 2. Ollama crashing or OOMing mid-reply is a wait, not a crash
+
+
+@pytest.mark.parametrize("error", [httpx.ReadError, httpx.RemoteProtocolError, httpx.WriteError])
+def test_transport_error_mid_reply_becomes_wait(
+    profile: GameProfile, error: type[httpx.TransportError]
+) -> None:
+    model, _ = _model(_raises(error))
+    decision = model.decide(_frame(), profile)
+    assert decision.action == "wait"
+    assert decision.reason is not None and error.__name__ in decision.reason
+
+
+# 3. Consecutive failures stop the loop instead of waiting forever
+
+
+def test_consecutive_failures_raise_after_the_limit(profile: GameProfile) -> None:
+    model, _ = _model(
+        lambda _: httpx.Response(500, json={"error": "cuda oom"}), max_consecutive_failures=3
+    )
+    assert model.decide(_frame(), profile).action == "wait"
+    assert model.decide(_frame(), profile).action == "wait"
+    with pytest.raises(BrainUnavailableError, match=r"3 decisions in a row failed.*cuda oom"):
+        model.decide(_frame(), profile)
+
+
+def test_unparseable_replies_count_as_failures(profile: GameProfile) -> None:
+    model, _ = _model(lambda _: _reply("garbage"), max_consecutive_failures=2)
+    assert model.decide(_frame(), profile).action == "wait"
+    with pytest.raises(BrainUnavailableError, match="unparseable"):
+        model.decide(_frame(), profile)
+
+
+def test_a_good_decision_resets_the_failure_count(profile: GameProfile) -> None:
+    replies = iter(["bad", "bad", OK_REPLY, "bad", "bad", OK_REPLY])
+    model, _ = _model(lambda _: _reply(next(replies)), max_consecutive_failures=3)
+    actions = [model.decide(_frame(), profile).action for _ in range(6)]
+    assert actions == ["wait", "wait", "interact", "wait", "wait", "interact"]
+
+
+# 4. Unload frees VRAM at shutdown and never raises
+
+
+def test_unload_sets_keep_alive_to_zero() -> None:
+    model, fake = _model(lambda _: _reply(""))
+    model.unload()
+    assert fake.requests == [{"model": "qwen3-vl:2b-instruct", "stream": False, "keep_alive": 0}]
+
+
+@pytest.mark.parametrize(
+    "handler",
+    [
+        _raises(httpx.ConnectError),
+        _raises(httpx.ReadTimeout),
+        lambda _: httpx.Response(500, json={"error": "boom"}),
+    ],
+)
+def test_unload_never_raises(handler: Handler) -> None:
+    model, _ = _model(handler)
+    model.unload()

@@ -246,6 +246,7 @@ def check_kill_switch(
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--target", default="Notepad", help="substring of the target window")
+    parser.add_argument("--process", default="notepad.exe", help="executable of the target")
     parser.add_argument("--out", type=Path, default=ROOT / "verify_phase1_frame.png")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="  %(levelname)s %(name)s: %(message)s")
@@ -259,7 +260,7 @@ def main() -> int:
     results = [check_capture(settings, args.out)]
 
     stop = threading.Event()
-    guard = WindowGuard(args.target)
+    guard = WindowGuard(target_window=args.target, target_process=args.process)
     driver = CountingDriver(DirectInputDriver())
     # The gate needs the kill switch and the kill switch releases the executor's keys; the
     # lambda looks `executor` up when the hotkey fires, by which point it exists.

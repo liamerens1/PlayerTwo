@@ -8,8 +8,8 @@ PlayerTwo captures the screen, hands each frame to a vision model running on you
 (via [Ollama](https://ollama.com)), gets back one action, and performs it. No cloud, no
 fees: everything runs on your machine.
 
-> **Status:** Phase 2, brain. Capture, input, the window guard, the F12 kill switch and the
-> Ollama model adapter are in place; the threaded loop that plays a game lands in Phase 3. See
+> **Status:** Phase 3, game loop. Capture, brain and hands run on their own threads and
+> play end to end. Not yet tuned for any real game; the first game profile is Phase 4. See
 > [`CLAUDE.md`](CLAUDE.md#phases).
 
 ## How it works
@@ -68,6 +68,28 @@ Every other command in this repo (`ruff`, `mypy`, `pytest`, `git`, `python ...`)
 same in both shells. Where the docs chain commands with `;` (PowerShell), use `&&` in
 Command Prompt.
 
+## Playing
+
+Put the game in **borderless windowed** mode, start Ollama, then:
+
+```bat
+python -m playertwo --target-process game.exe
+```
+
+- **F12** stops everything and releases every held key.
+- Input is only sent while the game's window is focused (after it has been focused for half
+  a second); alt-tab out and PlayerTwo is harmless. Terminal windows never receive input.
+- Target the game by its **executable** (find it in Task Manager → Details). You can add
+  `--target-window "part of the title"` as an extra check, but don't rely on a title
+  alone.
+- `--max-seconds 60` stops automatically after a minute.
+- To set the target permanently, put it in `safety.target_process` in
+  `config/config.yaml`.
+
+When it stops, it prints how many frames went to the model, how many decisions it made
+and the median latency, and how many actions it performed or dropped (stale, window not
+focused, superseded).
+
 ## Development
 
 ```powershell
@@ -92,7 +114,7 @@ sends input while Notepad is focused.
 To measure the model (captures the screen, never sends input; Ollama must be running):
 
 ```bat
-python scriptsenchmark_brain.py
+python scripts\benchmark_brain.py
 ```
 
 It prints per-decision latency, the median and p90, decisions per second, and how many

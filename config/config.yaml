@@ -7,18 +7,30 @@ brain:
   host: http://localhost:11434
   temperature: 0.2
   context_tokens: 4096
-  timeout_seconds: 10
+  max_reply_tokens: 64        # reply budget; the JSON schema caps the reason so this is plenty
+  timeout_seconds: 10         # per decision
+  warm_up_timeout_seconds: 120  # first load of the model; 4B/7B models can take a while cold
+  max_consecutive_failures: 5 # this many bad replies / failed calls in a row stop PlayerTwo
+  keep_alive: 30m             # how long Ollama keeps the model loaded between calls
 
 capture:
   width: 640                  # frames are downscaled to this width before the model sees them
   fps: 30
   change_threshold: 8.0       # mean per-pixel difference (0-255) that counts as "changed"
+  republish_seconds: 2.0      # re-send the last frame after this long without a change
 
 profile: profiles/simple-walker.yaml
 
 safety:
   kill_switch: f12
-  target_window: ""           # substring of the game window title; inputs are dropped otherwise
+  target_process: ""          # the game's executable, e.g. "game.exe" (recommended)
+  target_window: ""           # optional substring of the game's window title, checked too
+                              # input only goes to a window matching every target set;
+                              # terminals and shells never match
+  focus_settle_seconds: 0.5   # input starts only once the window has been focused this long
+
+loop:
+  max_decision_age_seconds: 1.5   # drop decisions about frames older than this
 
 logging:
   level: INFO

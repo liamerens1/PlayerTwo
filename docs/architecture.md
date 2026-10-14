@@ -96,8 +96,10 @@ seconds ago. So every stage always works on the **newest** value and old ones ar
 
 - **Kill switch** (F12 by default) via a global hotkey. Sets the shutdown event; hands
   releases every key it ever pressed.
-- **Foreground-window guard**: hands checks the focused window's title against
-  `safety.target_window` before every action.
+- **Foreground-window guard**: hands checks the focused window's owning executable against
+  `safety.target_process` (and its title against `safety.target_window`, if set) before
+  every action and throughout every hold. Terminal and shell windows never match, because
+  their titles contain the command line that started PlayerTwo.
 - **Validation**: model output is untrusted; anything invalid is `wait`.
 - **Scope**: offline single-player games only. No anti-cheat, no online play.
 

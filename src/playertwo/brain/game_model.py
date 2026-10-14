@@ -43,3 +43,6 @@ class GameModel(ABC):
 
     def warm_up(self) -> None:  # noqa: B027 - optional hook, deliberately a no-op
         """Load the model ahead of the first decision. Default: nothing to do."""
+
+    def unload(self) -> None:  # noqa: B027 - optional hook, deliberately a no-op
+        """Free the model's resources at shutdown. Must not raise. Default: nothing."""

@@ -1,45 +1,85 @@
 import pytest
 
-from playertwo.safety import WindowGuard
+from playertwo.safety import TERMINAL_PROCESSES, ForegroundWindow, WindowGuard
+
+NOTEPAD = ForegroundWindow("Untitled - Notepad", "Notepad.exe")
+CMD_TITLE = "C:\\Windows\\System32\\cmd.exe - python  -m playertwo --target-window Notepad"
 
 
-def _guard(target: str, title: str) -> WindowGuard:
-    return WindowGuard(target, title_provider=lambda: title)
-
-
-@pytest.mark.parametrize(
-    ("target", "title"),
-    [
-        ("Notepad", "Untitled - Notepad"),
-        ("notepad", "Untitled - Notepad"),
-        ("  Notepad ", "Untitled - Notepad"),
-        ("My Game", "My Game"),
-    ],
-)
-def test_focused_when_title_contains_target(target: str, title: str) -> None:
-    assert _guard(target, title).game_is_focused()
+def _guard(window: ForegroundWindow, *, title: str = "", process: str = "") -> WindowGuard:
+    return WindowGuard(target_window=title, target_process=process, window_provider=lambda: window)
 
 
 @pytest.mark.parametrize(
-    ("target", "title"),
+    ("title", "window"),
     [
-        ("Notepad", "Command Prompt"),
-        ("Notepad", ""),
-        ("My Game", "My"),
+        ("Notepad", NOTEPAD),
+        ("notepad", NOTEPAD),
+        ("  Notepad ", NOTEPAD),
+        ("My Game", ForegroundWindow("My Game", "game.exe")),
     ],
 )
-def test_not_focused_when_title_differs(target: str, title: str) -> None:
-    assert not _guard(target, title).game_is_focused()
+def test_title_target_matches_substring(title: str, window: ForegroundWindow) -> None:
+    assert _guard(window, title=title).game_is_focused()
 
 
-@pytest.mark.parametrize("target", ["", "   "])
-def test_empty_target_never_matches(target: str) -> None:
+@pytest.mark.parametrize(
+    "window",
+    [
+        ForegroundWindow("Command Prompt", "cmd.exe"),
+        ForegroundWindow("", ""),
+        ForegroundWindow("My", "game.exe"),
+    ],
+)
+def test_title_target_rejects_other_windows(window: ForegroundWindow) -> None:
+    assert not _guard(window, title="Notepad").game_is_focused()
+
+
+@pytest.mark.parametrize("terminal", ["WindowsTerminal.exe", "cmd.exe", "conhost.exe", "pwsh.exe"])
+def test_terminal_titled_with_the_command_line_never_matches(terminal: str) -> None:
+    # Regression: in the Phase 3 live run the terminal's title contained
+    # "--target-window Notepad", matched, and received 5 w's while Liam was alt-tabbed.
+    window = ForegroundWindow(CMD_TITLE, terminal)
+    assert not _guard(window, title="Notepad").game_is_focused()
+    assert not _guard(window, process=terminal).game_is_focused()
+
+
+def test_terminal_list_is_lowercase() -> None:
+    assert all(name == name.lower() for name in TERMINAL_PROCESSES)
+
+
+@pytest.mark.parametrize("process", ["notepad.exe", "Notepad.exe", " NOTEPAD.EXE "])
+def test_process_target_matches_executable_case_insensitively(process: str) -> None:
+    assert _guard(NOTEPAD, process=process).game_is_focused()
+
+
+def test_process_target_ignores_a_matching_title_in_another_program() -> None:
+    browser = ForegroundWindow("How to use Notepad - Google Chrome", "chrome.exe")
+    assert not _guard(browser, process="notepad.exe").game_is_focused()
+
+
+def test_process_and_title_must_both_match() -> None:
+    assert _guard(NOTEPAD, process="notepad.exe", title="Notepad").game_is_focused()
+    assert not _guard(NOTEPAD, process="notepad.exe", title="Game").game_is_focused()
+    other = ForegroundWindow("Untitled - Notepad", "notepad2.exe")
+    assert not _guard(other, process="notepad.exe", title="Notepad").game_is_focused()
+
+
+@pytest.mark.parametrize(("title", "process"), [("", ""), ("   ", "  ")])
+def test_no_target_never_matches(title: str, process: str) -> None:
     # Fail safe: an unconfigured guard must block input, even though "" is in every title.
-    assert not _guard(target, "Untitled - Notepad").game_is_focused()
+    guard = _guard(NOTEPAD, title=title, process=process)
+    assert not guard.game_is_focused()
+    assert guard.describe() == ""
 
 
-def test_title_is_read_on_every_check() -> None:
-    titles = iter(["Untitled - Notepad", "Command Prompt"])
-    guard = WindowGuard("Notepad", title_provider=lambda: next(titles))
+def test_describe_names_the_targets() -> None:
+    guard = _guard(NOTEPAD, title="Notepad", process="Notepad.exe")
+    assert guard.describe() == "process notepad.exe and window titled *notepad*"
+
+
+def test_window_is_read_on_every_check() -> None:
+    windows = iter([NOTEPAD, ForegroundWindow("Command Prompt", "cmd.exe")])
+    guard = WindowGuard(target_window="Notepad", window_provider=lambda: next(windows))
     assert guard.game_is_focused()
     assert not guard.game_is_focused()

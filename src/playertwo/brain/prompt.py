@@ -16,7 +16,7 @@ def build_system_prompt(profile: GameProfile) -> str:
     )
     names = " | ".join(f'"{name}"' for name in profile.action_names)
     return (
-        "You control a character in a third-person video game by looking at screenshots.\n"
+        f"You control a character in a {profile.game_type} by looking at screenshots.\n"
         f"Goal: {profile.goal}\n\n"
         f"Available actions:\n{action_lines}\n\n"
         "Reply with ONE action as JSON only, no other text:\n"
