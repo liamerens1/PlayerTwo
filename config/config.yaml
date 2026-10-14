@@ -1,0 +1,24 @@
+# PlayerTwo runtime config. Machine/runtime settings only; everything about a specific
+# game lives in its profile under profiles/.
+
+brain:
+  provider: ollama
+  model: moondream            # swap to qwen3-vl:4b or qwen2.5vl:7b; nothing else changes
+  host: http://localhost:11434
+  temperature: 0.2
+  context_tokens: 4096
+  timeout_seconds: 10
+
+capture:
+  width: 640                  # frames are downscaled to this width before the model sees them
+  fps: 30
+  change_threshold: 8.0       # mean per-pixel difference (0-255) that counts as "changed"
+
+profile: profiles/simple-walker.yaml
+
+safety:
+  kill_switch: f12
+  target_window: ""           # substring of the game window title; inputs are dropped otherwise
+
+logging:
+  level: INFO
