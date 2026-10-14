@@ -1,0 +1,13 @@
+"""The input interface. The only thing allowed to touch keyboard and mouse."""
+
+from typing import Protocol
+
+
+class InputDriver(Protocol):
+    def key_down(self, key: str) -> None: ...
+
+    def key_up(self, key: str) -> None: ...
+
+    def press(self, key: str) -> None: ...
+
+    def move_mouse(self, dx: int, dy: int) -> None: ...

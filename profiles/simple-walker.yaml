@@ -1,0 +1,29 @@
+# Starter profile: the smallest useful action set for a third-person game.
+# Copy this file per game and change bindings, actions and goal. No code changes needed.
+
+name: simple-walker
+description: Generic third-person walking and talking. Placeholder until the first real game is picked.
+goal: Explore forward, follow paths, and interact with anything highlighted.
+max_hold_seconds: 1.5
+
+actions:
+  move_forward:
+    type: hold
+    key: w
+    seconds: 0.8
+    description: Walk forward a short distance.
+  turn_left:
+    type: mouse
+    dx: -150
+    description: Turn the camera left.
+  turn_right:
+    type: mouse
+    dx: 150
+    description: Turn the camera right.
+  interact:
+    type: press
+    key: e
+    description: Interact with whatever is highlighted in front of the character.
+  wait:
+    type: wait
+    description: Do nothing this turn.

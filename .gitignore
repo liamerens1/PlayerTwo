@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+
+# Tooling caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Editors / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
+
+# Local overrides. config/config.yaml is committed; a personal override is not.
+config/config.local.yaml
+.env
+
+# Recorded gameplay (Phase 7): large, personal, never committed.
+recordings/
+
+*.log
+
+# Local session journal: untracked by design so it can be written freely
+# without polluting diffs or review. See CLAUDE.md.
+docs/memory/

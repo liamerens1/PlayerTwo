@@ -1,0 +1,80 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "playertwo"
+version = "0.1.0"
+description = "Lets a locally hosted AI vision model play games on your PC through real keyboard and mouse input."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.0",
+    "pillow>=10.4",
+    "pydantic>=2.8",
+    "pyyaml>=6.0",
+    "ollama>=0.4",
+    # Windows-only. Imported lazily inside the concrete classes that need them, so pure
+    # logic and tests still run on any OS. See docs/coding-guidelines.md section 9.
+    "dxcam>=0.0.5; sys_platform == 'win32'",
+    "pydirectinput>=1.0.4; sys_platform == 'win32'",
+    "keyboard>=0.13.5; sys_platform == 'win32'",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "pytest>=8.3",
+    "types-PyYAML>=6.0",
+]
+
+[project.scripts]
+playertwo = "playertwo.app:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/playertwo"]
+
+# ---------------------------------------------------------------- ruff
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",   # pycodestyle
+    "F",        # pyflakes
+    "I",        # import sorting
+    "N",        # naming
+    "UP",       # pyupgrade
+    "B",        # bugbear
+    "SIM",      # simplify
+    "ANN",      # annotations
+    "T20",      # no print
+    "RUF",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["ANN"]
+"src/playertwo/app.py" = ["T20"]  # CLI entry point is the one place print is allowed
+
+[tool.ruff.lint.isort]
+known-first-party = ["playertwo"]
+
+# ---------------------------------------------------------------- mypy
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src", "tests"]
+plugins = ["pydantic.mypy"]
+
+# Windows-only libraries without type stubs. Imported lazily; see coding guidelines.
+[[tool.mypy.overrides]]
+module = ["dxcam", "dxcam.*", "pydirectinput", "keyboard"]
+ignore_missing_imports = true
+
+# ---------------------------------------------------------------- pytest
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
