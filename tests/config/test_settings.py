@@ -1,7 +1,10 @@
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
-from playertwo.config import BrainSettings, SafetySettings
+from playertwo.actions import GameProfile
+from playertwo.config import BrainSettings, MemorySettings, SafetySettings, Settings
 
 
 @pytest.mark.parametrize(
@@ -45,3 +48,24 @@ def test_loopback_hosts_are_allowed(host: str) -> None:
 def test_remote_hosts_are_rejected(host: str) -> None:
     with pytest.raises(ValidationError, match="this machine"):
         BrainSettings(host=host)
+
+
+def test_memory_defaults_and_limits() -> None:
+    memory = MemorySettings()
+    assert memory.enabled and memory.size == 8 and memory.stuck_repeats == 3
+    with pytest.raises(ValidationError, match="stuck_repeats"):
+        MemorySettings(size=2, stuck_repeats=3)
+
+
+def test_shipped_config_and_profiles_are_valid() -> None:
+    root = Path(__file__).resolve().parents[2]
+    settings = Settings.load(root / "config" / "config.yaml")
+    assert settings.memory.enabled
+    testbed = GameProfile.load(root / "profiles" / "testbed.yaml")
+    assert set(testbed.action_names) == {"move_forward", "turn_left", "turn_right", "wait"}
+    walker = GameProfile.load(root / "profiles" / "simple-walker.yaml")
+    # Same bindings, so a decision means the same input in both.
+    for name in testbed.action_names:
+        assert testbed.actions[name] == walker.actions[name].model_copy(
+            update={"description": testbed.actions[name].description}
+        )

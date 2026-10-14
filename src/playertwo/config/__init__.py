@@ -5,6 +5,7 @@ from playertwo.config.settings import (
     CaptureSettings,
     LoggingSettings,
     LoopSettings,
+    MemorySettings,
     SafetySettings,
     Settings,
 )
@@ -14,6 +15,7 @@ __all__ = [
     "CaptureSettings",
     "LoggingSettings",
     "LoopSettings",
+    "MemorySettings",
     "SafetySettings",
     "Settings",
 ]

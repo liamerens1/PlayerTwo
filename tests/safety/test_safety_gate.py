@@ -1,6 +1,7 @@
 import threading
 
-from playertwo.safety import ForegroundWindow, KillSwitch, SafetyGate, WindowGuard
+from playertwo.safety import KillSwitch, SafetyGate, WindowGuard
+from playertwo.win32 import WindowInfo
 from tests.safety.test_kill_switch import FakeKeyHookBackend
 
 
@@ -15,9 +16,7 @@ class Clock:
 def _gate(settle: float) -> tuple[SafetyGate, KillSwitch, list[str], Clock]:
     switch = KillSwitch("f12", threading.Event(), lambda: None, backend=FakeKeyHookBackend())
     title = ["Untitled - Notepad"]
-    guard = WindowGuard(
-        "Notepad", window_provider=lambda: ForegroundWindow(title[0], "notepad.exe")
-    )
+    guard = WindowGuard("Notepad", window_provider=lambda: WindowInfo(title[0], "notepad.exe"))
     clock = Clock()
     return SafetyGate(switch, guard, settle_seconds=settle, clock=clock), switch, title, clock
 

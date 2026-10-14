@@ -1,12 +1,13 @@
 import pytest
 
-from playertwo.safety import TERMINAL_PROCESSES, ForegroundWindow, WindowGuard
+from playertwo.safety import TERMINAL_PROCESSES, WindowGuard
+from playertwo.win32 import WindowInfo
 
-NOTEPAD = ForegroundWindow("Untitled - Notepad", "Notepad.exe")
+NOTEPAD = WindowInfo("Untitled - Notepad", "Notepad.exe")
 CMD_TITLE = "C:\\Windows\\System32\\cmd.exe - python  -m playertwo --target-window Notepad"
 
 
-def _guard(window: ForegroundWindow, *, title: str = "", process: str = "") -> WindowGuard:
+def _guard(window: WindowInfo, *, title: str = "", process: str = "") -> WindowGuard:
     return WindowGuard(target_window=title, target_process=process, window_provider=lambda: window)
 
 
@@ -16,22 +17,22 @@ def _guard(window: ForegroundWindow, *, title: str = "", process: str = "") -> W
         ("Notepad", NOTEPAD),
         ("notepad", NOTEPAD),
         ("  Notepad ", NOTEPAD),
-        ("My Game", ForegroundWindow("My Game", "game.exe")),
+        ("My Game", WindowInfo("My Game", "game.exe")),
     ],
 )
-def test_title_target_matches_substring(title: str, window: ForegroundWindow) -> None:
+def test_title_target_matches_substring(title: str, window: WindowInfo) -> None:
     assert _guard(window, title=title).game_is_focused()
 
 
 @pytest.mark.parametrize(
     "window",
     [
-        ForegroundWindow("Command Prompt", "cmd.exe"),
-        ForegroundWindow("", ""),
-        ForegroundWindow("My", "game.exe"),
+        WindowInfo("Command Prompt", "cmd.exe"),
+        WindowInfo("", ""),
+        WindowInfo("My", "game.exe"),
     ],
 )
-def test_title_target_rejects_other_windows(window: ForegroundWindow) -> None:
+def test_title_target_rejects_other_windows(window: WindowInfo) -> None:
     assert not _guard(window, title="Notepad").game_is_focused()
 
 
@@ -39,7 +40,7 @@ def test_title_target_rejects_other_windows(window: ForegroundWindow) -> None:
 def test_terminal_titled_with_the_command_line_never_matches(terminal: str) -> None:
     # Regression: in the Phase 3 live run the terminal's title contained
     # "--target-window Notepad", matched, and received 5 w's while Liam was alt-tabbed.
-    window = ForegroundWindow(CMD_TITLE, terminal)
+    window = WindowInfo(CMD_TITLE, terminal)
     assert not _guard(window, title="Notepad").game_is_focused()
     assert not _guard(window, process=terminal).game_is_focused()
 
@@ -54,14 +55,14 @@ def test_process_target_matches_executable_case_insensitively(process: str) -> N
 
 
 def test_process_target_ignores_a_matching_title_in_another_program() -> None:
-    browser = ForegroundWindow("How to use Notepad - Google Chrome", "chrome.exe")
+    browser = WindowInfo("How to use Notepad - Google Chrome", "chrome.exe")
     assert not _guard(browser, process="notepad.exe").game_is_focused()
 
 
 def test_process_and_title_must_both_match() -> None:
     assert _guard(NOTEPAD, process="notepad.exe", title="Notepad").game_is_focused()
     assert not _guard(NOTEPAD, process="notepad.exe", title="Game").game_is_focused()
-    other = ForegroundWindow("Untitled - Notepad", "notepad2.exe")
+    other = WindowInfo("Untitled - Notepad", "notepad2.exe")
     assert not _guard(other, process="notepad.exe", title="Notepad").game_is_focused()
 
 
@@ -79,7 +80,16 @@ def test_describe_names_the_targets() -> None:
 
 
 def test_window_is_read_on_every_check() -> None:
-    windows = iter([NOTEPAD, ForegroundWindow("Command Prompt", "cmd.exe")])
+    windows = iter([NOTEPAD, WindowInfo("Command Prompt", "cmd.exe")])
     guard = WindowGuard(target_window="Notepad", window_provider=lambda: next(windows))
     assert guard.game_is_focused()
+    assert not guard.game_is_focused()
+
+
+def test_matches_applies_the_same_rules_to_any_window() -> None:
+    # Used to find the game window to capture, not only to check the focused one.
+    guard = WindowGuard("PlayerTwo Testbed", "python.exe", window_provider=lambda: NOTEPAD)
+    assert guard.matches(WindowInfo("PlayerTwo Testbed", "python.exe"))
+    assert not guard.matches(WindowInfo("PlayerTwo Testbed", "WindowsTerminal.exe"))
+    assert not guard.matches(WindowInfo("python -m testbed", "python.exe"))
     assert not guard.game_is_focused()

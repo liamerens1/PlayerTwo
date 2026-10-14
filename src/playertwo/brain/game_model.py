@@ -3,7 +3,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from playertwo.actions import Decision, GameProfile
+from playertwo.actions import Decision, GameProfile, History
 from playertwo.types import Frame
 
 
@@ -34,8 +34,11 @@ class GameModel(ABC):
     """Timing of the most recent `decide` call, if the adapter measures it."""
 
     @abstractmethod
-    def decide(self, frame: Frame, profile: GameProfile) -> Decision:
-        """Return one decision valid for `profile`.
+    def decide(
+        self, frame: Frame, profile: GameProfile, history: History | None = None
+    ) -> Decision:
+        """Return one decision valid for `profile`. `history` is the short-term memory
+        (recent actions and whether they changed the screen), if it's enabled.
 
         Must never raise for a bad model reply: return Decision.wait() instead. May raise
         BrainUnavailableError when the model can't be reached or isn't installed.

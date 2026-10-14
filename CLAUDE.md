@@ -83,7 +83,7 @@ Full detail in `docs/git-workflow.md`. Summary:
 Python 3.12 · Ollama (local model server) · Pydantic v2 (validation at every boundary) ·
 NumPy + Pillow (frames) · dxcam (Desktop Duplication capture) · pydirectinput (DirectInput
 scan-code input) · keyboard (kill switch) · PyYAML (config + profiles) · ruff (lint +
-format) · mypy `--strict` · pytest.
+format) · mypy `--strict` · pytest. Ursina (Panda3D) for the testbed game only.
 
 Hardware it's tuned for: RTX 3070 Ti (**8 GB VRAM**, the real constraint), i7-10700K,
 16 GB DDR4 (first pinch point once game + model + OS all compete).
@@ -105,7 +105,15 @@ python -m playertwo --target-process notepad.exe --max-seconds 30   # safe live 
 
 ollama pull qwen3-vl:2b-instruct   # starter model (non-thinking)
 python scripts\benchmark_brain.py  # decision latency + reply quality, no input sent
+
+pip install -e ".[dev,testbed]"    # the test game (Ursina)
+python -m testbed --level 1        # play it (WASD + mouse); --autopilot to watch, no input
+python -m playertwo --profile profiles/testbed.yaml --target-process python.exe --target-window "PlayerTwo Testbed"
+python scripts\score_testbed.py --all   # success rate per level, per --tag
 ```
+
+The testbed (`testbed/`) and PlayerTwo (`src/playertwo/`) never import each other; they
+meet only through the screen and input, like a real game (enforced by a test).
 
 ## Phases
 
@@ -118,8 +126,8 @@ the game ladder and what's parked. Keep the two in sync; reorder only with Liam'
 | 1     | `feat/capture-input/1`  | dxcam capture, pydirectinput driver, foreground-window guard, F12 kill switch.             | Done    |
 | 2     | `feat/brain/2`          | Ollama vision adapter (qwen3-vl:2b-instruct, ~0.56 s/decision): one validated decision per frame. | Done    |
 | 3     | `feat/game-loop/3`      | Threaded capture → brain → hands loop, plus the terminal-input safety fix.                 | Done    |
-| 4     | `feat/testbed/4`        | Testbed game + Tier 1 short-term memory + Phase 3 review items. Level 1 success rate, with and without memory. | Next    |
-| 5     | `feat/model-upgrades/5` | qwen3-vl:4b-instruct, qwen2.5vl:7b, judged on testbed success per level, decisions/s, VRAM. | Planned |
+| 4     | `feat/testbed/4`        | Testbed game + Tier 1 short-term memory + Phase 3 review items. Level 1: 20/20 with and without memory; level 2: 1/20. | Done    |
+| 5     | `feat/model-upgrades/5` | qwen3-vl:4b-instruct, qwen2.5vl:7b, judged on testbed success per level, decisions/s, VRAM. | Next    |
 | 6     | `feat/optimize/6`       | Frame size, change detection, action persistence, judged on testbed numbers.               | Planned |
 | 7     | `feat/lessons/7`        | Lessons journal (Tier 2): failure detection → per-game lessons in the prompt. Level 5 (pit) success improves across runs. | Planned |
 | 8     | `feat/first-game/8`     | First real game: A Short Hike (fallback SuperTuxKart). Profile + prompt iteration.         | Planned |

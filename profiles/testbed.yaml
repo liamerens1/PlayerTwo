@@ -1,0 +1,34 @@
+# PlayerTwo Testbed (python -m testbed). Same bindings as simple-walker.yaml, without
+# interact: the testbed has nothing to interact with.
+#
+#   python -m playertwo --profile profiles/testbed.yaml ^
+#       --target-process python.exe --target-window "PlayerTwo Testbed"
+#
+# The testbed runs as python.exe, like PlayerTwo itself, so target the process AND the
+# window title: the guard requires both to match.
+
+name: testbed
+description: PlayerTwo's own test game. Reach the yellow cube; five levels.
+game_type: simple third-person 3D test game
+goal: >-
+  Reach the yellow cube. If you can't see it, turn until you do. Walk around walls and
+  boxes. Never walk into a dark hole or off a red edge.
+max_hold_seconds: 1.5
+
+actions:
+  move_forward:
+    type: hold
+    key: w
+    seconds: 0.8
+    description: Walk forward a short distance.
+  turn_left:
+    type: mouse
+    dx: -150
+    description: Turn left (about 30 degrees).
+  turn_right:
+    type: mouse
+    dx: 150
+    description: Turn right (about 30 degrees).
+  wait:
+    type: wait
+    description: Do nothing this turn.

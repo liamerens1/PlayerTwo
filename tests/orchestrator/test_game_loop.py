@@ -1,14 +1,15 @@
 import itertools
 import threading
 import time
+from collections.abc import Callable
 
 import numpy as np
 import pytest
 
-from playertwo.actions import Decision, GameProfile
+from playertwo.actions import Decision, GameProfile, History, PastAction
 from playertwo.brain import BrainUnavailableError, GameModel, InferenceStats
 from playertwo.capture import ChangeDetector, FrameSource
-from playertwo.config import LoopSettings
+from playertwo.config import LoopSettings, MemorySettings
 from playertwo.hands import ActionExecutor
 from playertwo.orchestrator import GameLoop
 from playertwo.types import Frame
@@ -77,9 +78,13 @@ class ScriptedModel(GameModel):
         self.delay = delay
         self.error = error
         self.calls = 0
+        self.histories: list[History | None] = []
 
-    def decide(self, frame: Frame, profile: GameProfile) -> Decision:
+    def decide(
+        self, frame: Frame, profile: GameProfile, history: History | None = None
+    ) -> Decision:
         self.calls += 1
+        self.histories.append(history)
         if self.error is not None:
             raise self.error
         time.sleep(self.delay)
@@ -95,6 +100,10 @@ def _loop(
     gate: OpenGate | None = None,
     max_age: float = 5.0,
     republish: float = 10.0,
+    memory: MemorySettings | None = None,
+    focused: Callable[[], bool] = lambda: True,
+    wait_for_result: bool = True,
+    settle: float = 0.03,
 ) -> tuple[GameLoop, RecordingDriver, threading.Event]:
     driver = RecordingDriver()
     stop = threading.Event()
@@ -106,9 +115,13 @@ def _loop(
         executor,
         profile,
         stop,
-        LoopSettings(max_decision_age_seconds=max_age),
+        LoopSettings(
+            max_decision_age_seconds=max_age, wait_for_result=wait_for_result, settle_seconds=settle
+        ),
         fps=100,
         republish_seconds=republish,
+        memory=memory,
+        focused=focused,
     )
     return loop, driver, stop
 
@@ -161,14 +174,18 @@ def test_closed_gate_drops_input_but_keeps_deciding(profile: GameProfile) -> Non
 
 def test_static_screen_is_republished_so_the_loop_never_stalls(profile: GameProfile) -> None:
     model = ScriptedModel()
-    loop, _, stop = _loop(profile, source=StaticSource(), model=model, republish=0.05)
+    loop, _, stop = _loop(
+        profile, source=StaticSource(), model=model, republish=0.05, wait_for_result=False
+    )
     _run_for(loop, stop, 0.4)
     assert model.calls >= 3
 
 
 def test_static_screen_without_republish_decides_once(profile: GameProfile) -> None:
     model = ScriptedModel()
-    loop, _, stop = _loop(profile, source=StaticSource(), model=model, republish=60)
+    loop, _, stop = _loop(
+        profile, source=StaticSource(), model=model, republish=60, wait_for_result=False
+    )
     _run_for(loop, stop, 0.3)
     assert model.calls == 1
 
@@ -205,9 +222,11 @@ def test_brain_always_sees_the_newest_frame(profile: GameProfile) -> None:
     seen: list[int] = []
 
     class SlowRecordingModel(ScriptedModel):
-        def decide(self, frame: Frame, profile: GameProfile) -> Decision:
+        def decide(
+            self, frame: Frame, profile: GameProfile, history: History | None = None
+        ) -> Decision:
             seen.append(int(frame[0, 0, 0]))
-            return super().decide(frame, profile)
+            return super().decide(frame, profile, history)
 
     loop, _, stop = _loop(profile, model=SlowRecordingModel(action="wait", delay=0.05))
     _run_for(loop, stop, 0.4)
@@ -215,3 +234,140 @@ def test_brain_always_sees_the_newest_frame(profile: GameProfile) -> None:
     # skipped, never queued, so consecutive decisions see frames several grabs apart.
     assert loop.stats.frames_skipped > 0
     assert any(b - a > 1 for a, b in itertools.pairwise(seen))
+
+
+class FrozenSource:
+    """The same frame forever: whatever the character does, nothing on screen changes."""
+
+    def grab(self) -> Frame | None:
+        return np.zeros((8, 8, 3), dtype=np.uint8)
+
+    def close(self) -> None:
+        pass
+
+
+QUICK_MEMORY = MemorySettings(change_threshold=0.5, stuck_repeats=2)
+"""Capture runs at 100 fps in these tests, so the helper's 30 ms settle shows an effect."""
+
+
+def test_unfocused_game_pauses_capture_and_decisions(profile: GameProfile) -> None:
+    source = ChangingSource()
+    model = ScriptedModel()
+    loop, driver, stop = _loop(profile, source=source, model=model, focused=lambda: False)
+    _run_for(loop, stop, 0.3)
+    assert source.grabs == 0
+    assert model.calls == 0
+    assert driver.calls == []
+    assert loop.stats.paused_seconds > 0.2
+
+
+def test_decisions_resume_when_the_game_is_focused_again(profile: GameProfile) -> None:
+    focus = threading.Event()
+    model = ScriptedModel()
+    loop, _, stop = _loop(profile, model=model, focused=focus.is_set)
+    threading.Timer(0.2, focus.set).start()
+    _run_for(loop, stop, 0.5)
+    assert model.calls > 0
+    assert 0.1 < loop.stats.paused_seconds < 0.4
+
+
+def test_memory_off_passes_no_history(profile: GameProfile) -> None:
+    model = ScriptedModel()
+    loop, _, stop = _loop(profile, model=model)
+    _run_for(loop, stop, 0.2)
+    assert loop.memory is None
+    assert model.histories and all(h is None for h in model.histories)
+
+
+def test_memory_records_performed_actions_and_whether_the_screen_changed(
+    profile: GameProfile,
+) -> None:
+    model = ScriptedModel("interact")
+    loop, _, stop = _loop(profile, model=model, memory=QUICK_MEMORY)
+    _run_for(loop, stop, 0.3)
+    seen = [h for h in model.histories if h is not None and h.recent]
+    assert seen, "the model never saw its own history"
+    assert seen[-1].recent[-1] == PastAction("interact", "test", True)  # ChangingSource
+    assert len(seen[-1].recent) <= QUICK_MEMORY.size
+
+
+def test_wait_is_remembered_without_a_screen_verdict(profile: GameProfile) -> None:
+    loop, _, stop = _loop(profile, model=ScriptedModel("wait"), memory=QUICK_MEMORY)
+    _run_for(loop, stop, 0.2)
+    assert loop.memory is not None
+    recent = loop.memory.snapshot().recent
+    assert recent and all(p == PastAction("wait", "test", None) for p in recent)
+
+
+def test_dropped_actions_are_not_remembered(profile: GameProfile) -> None:
+    loop, _, stop = _loop(profile, gate=OpenGate(open_=False), memory=QUICK_MEMORY)
+    _run_for(loop, stop, 0.2)
+    assert loop.memory is not None and loop.memory.snapshot().recent == ()
+
+
+def test_repeating_an_action_that_changes_nothing_triggers_the_stuck_hint(
+    profile: GameProfile,
+) -> None:
+    quick = profile.model_copy(update={"max_hold_seconds": 0.02})
+    model = ScriptedModel("move_forward")
+    loop, _, stop = _loop(
+        quick, source=FrozenSource(), model=model, memory=QUICK_MEMORY, republish=0.02
+    )
+    _run_for(loop, stop, 0.5)
+    stuck = [h for h in model.histories if h is not None and h.stuck_action is not None]
+    assert stuck, "the stuck hint never reached the model"
+    assert stuck[-1].stuck_action == "move_forward" and stuck[-1].stuck_repeats >= 2
+    assert loop.stats.stuck_hints == len(stuck)
+
+
+class TimedModel(ScriptedModel):
+    """Records when each decision starts and which frame (by its first pixel) it saw."""
+
+    def __init__(self, action: str) -> None:
+        super().__init__(action)
+        self.started: list[float] = []
+        self.frames: list[int] = []
+
+    def decide(
+        self, frame: Frame, profile: GameProfile, history: History | None = None
+    ) -> Decision:
+        self.started.append(time.monotonic())
+        self.frames.append(int(frame[0, 0, 0]))
+        return super().decide(frame, profile, history)
+
+
+def test_act_then_look_waits_for_each_action_to_finish(profile: GameProfile) -> None:
+    # Regression: deciding while the last action was still running meant every decision
+    # saw the screen from before it, so the model repeated turns past the target.
+    hold = profile.model_copy(update={"max_hold_seconds": 0.1})
+    model = TimedModel("move_forward")
+    loop, _, stop = _loop(hold, model=model, settle=0.05)
+    _run_for(loop, stop, 0.8)
+    assert len(model.started) >= 3
+    gaps = [b - a for a, b in itertools.pairwise(model.started)]
+    # The hold, then the settle; less two 15.6 ms ticks for coarse Windows timers on CI.
+    # Deciding without waiting (the old behaviour) gives gaps near 0.
+    assert min(gaps) >= 0.1 + 0.05 - 0.032
+    assert loop.stats.decisions_skipped == 0  # nothing decided that hands then threw away
+
+
+def test_act_then_look_decides_on_a_screen_captured_after_the_action(
+    profile: GameProfile,
+) -> None:
+    source = ChangingSource()  # frame value = grab count, so later frames are larger
+    hold = profile.model_copy(update={"max_hold_seconds": 0.05})
+    model = TimedModel("move_forward")
+    loop, _, stop = _loop(hold, source=source, model=model, settle=0.05)
+    _run_for(loop, stop, 0.6)
+    # Capture runs at 100 fps: a hold plus settle (0.1 s) is about 10 grabs apart (7 seen
+    # on a busy CI runner). Deciding without waiting gives jumps of 0-1.
+    jumps = [b - a for a, b in itertools.pairwise(model.frames)]
+    assert jumps and min(jumps) >= 5
+
+
+def test_act_then_look_keeps_going_when_actions_are_dropped(profile: GameProfile) -> None:
+    model = ScriptedModel("move_forward")
+    loop, driver, stop = _loop(profile, model=model, gate=OpenGate(open_=False))
+    _run_for(loop, stop, 0.3)
+    assert model.calls >= 3  # a dropped action still releases the brain
+    assert driver.calls == []

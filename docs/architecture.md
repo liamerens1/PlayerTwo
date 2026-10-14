@@ -28,14 +28,42 @@ time instead, which is much smaller and which we can trade against model quality
                          SAFETY: kill switch + window guard wrap HANDS
 ```
 
-1. **Capture** grabs the newest frame, downscales it (~640 px wide), and only passes it on
-   when it has meaningfully changed.
-2. **Brain** turns a frame + the active profile into one `Decision` (an action name from
-   the profile, plus an optional reason).
+1. **Capture** grabs the newest frame of the game window only (its client area, from
+   whichever monitor shows it), downscales it (~640 px wide), and only passes it on when
+   it has meaningfully changed.
+2. **Brain** turns a frame + the active profile + the short-term memory into one
+   `Decision` (an action name from the profile, plus an optional reason).
 3. **Hands** looks the action up in the profile and performs it (hold a key, press a key,
    move the mouse), clamped to the profile's limits.
-4. **Orchestrator** runs those on separate threads, connected by single-slot hand-offs.
+4. **Orchestrator** runs those on separate threads, connected by single-slot hand-offs,
+   and pauses capture and brain while the game isn't focused.
 5. **Safety** sits in front of hands: no kill switch, no input; wrong window, no input.
+
+## Short-term memory (Tier 1)
+
+A frozen model repeats the same mistake forever, so PlayerTwo tells it what it just did.
+After hands performs an action it waits `memory.settle_seconds`, compares the screen with
+the one from just before the action, and records (action, short reason, screen changed
+or not) in a ring of the last `memory.size` actions (`playertwo.memory`). The brain puts
+that list, one short line each (`- turn_left -> screen changed`), into the per-frame
+prompt; the system prompt stays the same every call. **The model's own past reasons are
+left out of the prompt:** qwen3-vl 2B copied them word for word and repeated the old
+action with the target in plain view (level 1 fell from 20/20 to 1/19). The **stuck detector** adds a hint when the same action ran
+`memory.stuck_repeats` times in a row without changing the screen (walking into a wall).
+Only performed actions are recorded: dropped (stale, unfocused) ones never happened.
+`--no-memory` turns it off, which is how its effect is measured on the testbed. The data
+types (`History`, `PastAction`) live in `actions`, so the brain reads them without
+depending on the orchestrator.
+
+## The testbed
+
+`testbed/` is a small Ursina game made for measuring PlayerTwo: reach the yellow cube,
+five levels, scored episodes written as JSON lines. It is deliberately **not** part of
+`playertwo`: neither package imports the other (a test enforces it), so PlayerTwo plays
+it exactly as it would a commercial game, through the screen, keyboard and mouse. Its
+movement, collisions and outcomes are pure logic (`testbed/physics.py`,
+`testbed/episode.py`), so levels are proven winnable in unit tests by a path-following
+autopilot; only `testbed/game.py` touches Ursina.
 
 ## Brain vs. hands
 
@@ -92,6 +120,18 @@ If capture waited for the model, the game would be sampled only as fast as the m
 thinks. If actions queued up, the character would act on what the screen looked like
 seconds ago. So every stage always works on the **newest** value and old ones are dropped.
 
+## Act, then look (`loop.wait_for_result`, on by default)
+
+Capture never waits, but the **brain** does: after a decision it waits until hands has
+performed it and `loop.settle_seconds` has passed, then decides on the screen as it is
+at that moment. Found the hard way on the testbed: when the brain decided while the last
+action was still running, each decision saw the screen from *before* that action, so the
+model repeated turns past the target and spun in circles. Each step now takes decision +
+action + settle (about 1–1.6 s with a 0.8 s hold), but every decision sees what its last
+action did. The pipelined behaviour is still available with `wait_for_result: false`.
+Keeping a key held across decisions that repeat the same action ("action persistence")
+is planned for Phase 6.
+
 ## Safety model
 
 - **Kill switch** (F12 by default) via a global hotkey. Sets the shutdown event; hands
@@ -100,6 +140,9 @@ seconds ago. So every stage always works on the **newest** value and old ones ar
   `safety.target_process` (and its title against `safety.target_window`, if set) before
   every action and throughout every hold. Terminal and shell windows never match, because
   their titles contain the command line that started PlayerTwo.
+- **Pause on focus loss**: while the game isn't the foreground window, capture and the
+  brain idle too (frames captured before the pause are discarded), so the model doesn't
+  take GPU time from whatever is in front, and nothing stale is acted on afterwards.
 - **Validation**: model output is untrusted; anything invalid is `wait`.
 - **Scope**: offline single-player games only. No anti-cheat, no online play.
 

@@ -31,6 +31,14 @@ safety:
 
 loop:
   max_decision_age_seconds: 1.5   # drop decisions about frames older than this
+  wait_for_result: true       # act, then look: decide once the last action finished
+  settle_seconds: 0.15        # after an action, wait this long before looking again
+
+memory:                       # Tier 1 short-term memory (turn off per run with --no-memory)
+  enabled: true
+  size: 8                     # recent actions shown in each prompt
+  stuck_repeats: 3            # same action this many times with no screen change -> "stuck" hint
+  change_threshold: 3.0       # mean per-pixel difference (0-255) that counts as "screen changed"
 
 logging:
   level: INFO

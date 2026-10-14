@@ -8,9 +8,10 @@ PlayerTwo captures the screen, hands each frame to a vision model running on you
 (via [Ollama](https://ollama.com)), gets back one action, and performs it. No cloud, no
 fees: everything runs on your machine.
 
-> **Status:** Phases 0–3 done: capture, brain and hands run on their own threads and play
-> end to end, verified against Notepad. Next is Phase 4, a testbed game that scores play;
-> the first real game is Phase 8. See the [roadmap](docs/roadmap.md).
+> **Status:** Phases 0–4 done. PlayerTwo plays its own test game: with qwen3-vl 2B it
+> reaches a target straight ahead 20/20 times, but finds one that starts off-screen only
+> 1/20. Next is Phase 5 (bigger models); the first real game is Phase 8. See the [roadmap](docs/roadmap.md), the single source of
+> truth for direction.
 
 ## How it works
 
@@ -79,16 +80,61 @@ python -m playertwo --target-process game.exe
 - **F12** stops everything and releases every held key.
 - Input is only sent while the game's window is focused (after it has been focused for half
   a second); alt-tab out and PlayerTwo is harmless. Terminal windows never receive input.
+  While the game isn't focused, capture and the model pause too, so they don't take GPU
+  time from whatever you switched to.
 - Target the game by its **executable** (find it in Task Manager → Details). You can add
   `--target-window "part of the title"` as an extra check, but don't rely on a title
   alone.
-- `--max-seconds 60` stops automatically after a minute.
+- Only the game window is captured (its inside, without the title bar), on whichever
+  monitor it's on. Moving it is fine.
+- `--max-seconds 60` stops automatically after a minute. PlayerTwo also stops a few
+  seconds after the game window closes.
+- `--profile profiles\testbed.yaml` picks a game profile; `--no-memory` turns off
+  short-term memory (the model's last few actions in each prompt, and a hint when it
+  keeps repeating an action that does nothing).
 - To set the target permanently, put it in `safety.target_process` in
   `config/config.yaml`.
 
 When it stops, it prints how many frames went to the model, how many decisions it made
-and the median latency, and how many actions it performed or dropped (stale, window not
-focused, superseded).
+and the median latency, how many actions it performed or dropped (stale, window not
+focused, superseded), how long it was paused and how often the stuck hint was shown.
+
+## The testbed
+
+A tiny third-person game made for PlayerTwo, in `testbed/` (separate from PlayerTwo:
+neither imports the other). Walk a blue character to a big yellow cube. Five levels:
+
+1. Open field, cube straight ahead.
+2. Cube at a random angle, often off-screen.
+3. A wall in the way.
+4. Several obstacles.
+5. A pit, with unfenced edges: falling is a death.
+
+```bat
+pip install -e ".[dev,testbed]"
+python -m testbed --level 1
+```
+
+W/S walk, A/D strafe, mouse turns, Escape quits. Each episode ends in SUCCESS, YOU FELL or
+TIME UP, then a new position (seeded: `--seed`, so runs repeat). It closes after
+`--episodes` (default 20) and writes one JSON line per episode to
+`testbed\results\<timestamp>.jsonl`. The clock pauses while its window isn't focused.
+`--autopilot` lets a built-in path follower play (a demo; it reads the level's layout,
+sees nothing and sends no input).
+
+To let PlayerTwo play it, start PlayerTwo first, then the testbed:
+
+```bat
+python -m playertwo --profile profiles\testbed.yaml --target-process python.exe --target-window "PlayerTwo Testbed"
+python -m testbed --level 1 --tag memory-on
+```
+
+The testbed runs as `python.exe`, like PlayerTwo, so give both the process and the window
+title. Score the results with:
+
+```bat
+python scripts\score_testbed.py --all
+```
 
 ## Development
 
@@ -118,7 +164,10 @@ python scripts\benchmark_brain.py
 ```
 
 It prints per-decision latency, the median and p90, decisions per second, and how many
-replies had to fall back to `wait`.
+replies had to fall back to `wait`. `--target-process` / `--target-window` capture only
+a game window (use a moving game: deciding on the same image twice hits Ollama's cache and
+looks faster than it is), `--memory` adds a full short-term memory to every prompt to
+measure what it costs.
 
 Read [`CLAUDE.md`](CLAUDE.md), [`docs/coding-guidelines.md`](docs/coding-guidelines.md),
 [`docs/git-workflow.md`](docs/git-workflow.md) and [`docs/roadmap.md`](docs/roadmap.md)

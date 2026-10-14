@@ -5,7 +5,7 @@ from typing import Literal
 from urllib.parse import urlsplit
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
@@ -83,6 +83,33 @@ class SafetySettings(_Section):
 class LoopSettings(_Section):
     max_decision_age_seconds: float = Field(default=1.5, gt=0, le=30)
     """Hands drops a decision whose frame was captured longer ago than this."""
+    wait_for_result: bool = True
+    """Act, then look: decide only once the previous action has finished and settled, on
+    the screen as it is then. Off: decide on the newest frame while the previous action
+    may still be running (faster, but each decision is one action behind)."""
+    settle_seconds: float = Field(default=0.15, ge=0, le=2)
+    """Wait this long after an action before looking at the screen again, so the game
+    has drawn its effect."""
+
+
+class MemorySettings(_Section):
+    """Tier 1 short-term memory: the model sees its last few actions and whether they
+    changed the screen, plus a hint when it keeps repeating one that does nothing."""
+
+    enabled: bool = True
+    size: int = Field(default=8, ge=1, le=32)
+    """How many recent actions go into each prompt."""
+    stuck_repeats: int = Field(default=3, ge=2, le=32)
+    """The same action this many times in a row with no screen change counts as stuck."""
+    change_threshold: float = Field(default=3.0, ge=0, le=255)
+    """Mean per-pixel difference (0-255) between the screen before and after an action
+    above which the action "changed the screen"."""
+
+    @model_validator(mode="after")
+    def _stuck_fits(self) -> "MemorySettings":
+        if self.stuck_repeats > self.size:
+            raise ValueError("memory.stuck_repeats can't be larger than memory.size")
+        return self
 
 
 class LoggingSettings(_Section):
@@ -95,6 +122,7 @@ class Settings(_Section):
     profile: Path = Path("profiles/simple-walker.yaml")
     safety: SafetySettings = SafetySettings()
     loop: LoopSettings = LoopSettings()
+    memory: MemorySettings = MemorySettings()
     logging: LoggingSettings = LoggingSettings()
 
     @classmethod

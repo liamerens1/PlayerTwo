@@ -5,6 +5,7 @@ from playertwo.brain.ollama_vision_model import OllamaVisionModel, encode_jpeg
 from playertwo.brain.prompt import (
     FRAME_PROMPT,
     REASON_MAX_CHARS,
+    build_frame_prompt,
     build_system_prompt,
     decision_schema,
 )
@@ -16,6 +17,7 @@ __all__ = [
     "GameModel",
     "InferenceStats",
     "OllamaVisionModel",
+    "build_frame_prompt",
     "build_system_prompt",
     "decision_schema",
     "encode_jpeg",

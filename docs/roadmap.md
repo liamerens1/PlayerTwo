@@ -1,7 +1,9 @@
 # Roadmap — PlayerTwo
 
-Where PlayerTwo is going, phase by phase. `CLAUDE.md`'s phase table is the short version
-of this document; **the two must always match** (same numbers, names and branches).
+Where PlayerTwo is going, phase by phase. **This is the single source of truth for
+direction**; the original planning doc ("Local AI Game-Playing Bridge — Build Plan") is
+superseded. `CLAUDE.md`'s phase table is the short version of this document; **the two
+must always match** (same numbers, names and branches).
 Change the order only with Liam's OK, and record the change in
 `docs/memory/project_memory.md`.
 
@@ -66,20 +68,39 @@ marked _(proposed)_ haven't been agreed yet; confirm them before the phase start
 ### 4. Testbed game + Tier 1 short-term memory + Phase 3 review items — `feat/testbed/4`
 
 - **Goal:**
-  - **Testbed game:** a small game with numbered levels that PlayerTwo plays like any
-    other game, but which reports success or failure so play can be scored. Level 1 is
-    the baseline; level 5 has a pit (the failure case Phase 7 learns from).
-  - **Tier 1 short-term memory:** recent decisions carried into the prompt.
-  - **Phase 3 review items.** Candidates from PR #5's known issues, to be replaced by
-    the planning review's list when it arrives:
-    - every decision is `move_forward` on non-game screens;
-    - on a static screen decisions come only every 2 s (`republish_seconds`,
-      `change_threshold`);
-    - about 1 in 10 decisions is dropped as stale while a hold is running;
-    - `TERMINAL_PROCESSES` is a fixed list (e.g. VS Code's terminal isn't in it).
+  - **Testbed game** (`testbed/`, `python -m testbed --level N`): a tiny Ursina
+    third-person game built for a 2B vision model at 640 px. A capsule character, a big
+    yellow cube to reach, flat contrasting colours. PlayerTwo plays it like any other game
+    (screen in, keyboard and mouse out; neither package imports the other) and it scores
+    every episode: success on touching the cube, death on falling, timeout. Results are
+    one JSON line per episode; `scripts/score_testbed.py` summarises them. Levels:
+    1 open field, 2 cube at a random angle (often off-screen), 3 a wall in the way,
+    4 several obstacles, 5 a pit and unfenced edges. Seeded, so runs repeat.
+  - **Tier 1 short-term memory:** the last 8 performed actions (action, short reason,
+    whether the screen changed) in each prompt, plus a stuck detector: the same action
+    3 times with no screen change adds a "you are probably stuck" hint.
+  - **Phase 3 review items:** capture only the game window (right monitor, follows
+    moves); pause capture and inference while the game isn't focused; build capture and
+    the kill switch inside `app.py`'s `try` so the model is always unloaded; measure VRAM
+    with the testbed and the model loaded together.
 - **Done bar:** **level 1 success rate measured, with and without Tier 1 memory**, over
-  the same number of attempts (≥ 20 _(proposed)_).
-- **Status:** ⏭ next.
+  the same number of episodes (20 each, same seeds). Level 2 measured the same way.
+- **Status:** ✅ done. Baseline (qwen3-vl:2b-instruct, 640 px, act-then-look, seeds
+  1–20):
+
+  | Level | Memory | Success | Median time | Time-outs | Decision |
+  | ----- | ------ | ------- | ----------- | --------- | -------- |
+  | 1     | on     | 20/20   | 5.8 s       | 0         | 0.71 s   |
+  | 1     | off    | 20/20   | 6.4 s       | 0         | 0.67 s   |
+  | 2     | on     | 1/20    | 5.0 s       | 19        | 0.72 s   |
+  | 2     | off    | 1/20    | 4.9 s       | 19        | 0.59 s   |
+
+  Found on the way: deciding while the last action still ran made the model repeat
+  turns (fixed by deciding only after each action's result is on screen), and putting
+  the model's own reasons into its memory made it copy them (1/19 on level 1; reasons
+  are now left out). On level 2 the 2B model can't reliably tell which way to turn:
+  without memory it mostly walks forward blindly, with memory it turns more but still
+  rarely lines up. That is the bar Phase 5's bigger models have to beat.
 
 ### 5. Model upgrades — `feat/model-upgrades/5`
 
@@ -87,11 +108,13 @@ marked _(proposed)_ haven't been agreed yet; confirm them before the phase start
 - **Done bar:** for each model, testbed **success rate per level**, **decisions/s**, and
   **VRAM used while a game is running**, recorded side by side, and a default model
   chosen from them.
-- **Status:** planned.
+- **Status:** ⏭ next.
 
 ### 6. Optimise — `feat/optimize/6`
 
-- **Goal:** frame size, change detection, action persistence.
+- **Goal:** frame size, change detection, action persistence (keep a key held while
+  the next decision repeats it: with act-then-look the character currently walks 0.8 s,
+  then stands about 0.9 s while the next decision is made).
 - **Done bar:** every change is judged on testbed numbers. One is kept only if it improves
   success rate or decisions/s without making the other worse _(proposed)_.
 - **Status:** planned. Known lever: image tokens are about 70% of decision time
