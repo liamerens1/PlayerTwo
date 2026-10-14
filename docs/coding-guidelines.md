@@ -33,12 +33,19 @@ stop.
 | `playertwo.hands`      | Turning a validated `Action` into input. Clamping. Releasing keys.         | Deciding what to do. Calling the model.                   |
 | `playertwo.actions`    | Profile schema, `Decision` schema, loading/validating profiles.            | Side effects. Imports from capture/brain/hands.           |
 | `playertwo.safety`     | Kill switch, foreground-window guard.                                      | Business logic.                                           |
+| `playertwo.memory`     | Short-term memory of performed actions; the stuck detector.                | Frames, threads beyond its own lock, model calls.         |
 | `playertwo.orchestrator` | Threads and wiring: capture → brain → hands.                             | Model or game specifics. Direct input calls.              |
 | `playertwo.config`     | Loading and validating `config/config.yaml`.                               | Reading env vars ad hoc elsewhere.                        |
+| `playertwo.win32`      | Finding windows: title, owning executable, client rectangle.               | Deciding anything. Sending input.                         |
 
-Dependency direction: `actions` and `config` depend on nothing internal. `capture`,
-`brain`, `hands`, `safety` may depend on `actions`/`config`. Only `orchestrator` and
-`app.py` wire them together.
+Dependency direction: `actions`, `config`, `types` and `win32` depend on nothing internal.
+`capture`, `brain`, `hands`, `safety`, `memory` may depend on those. Only `orchestrator`
+and `app.py` wire them together.
+
+**The testbed (`testbed/`, repo root) is not part of PlayerTwo.** `playertwo` never imports
+it and it never imports `playertwo` (`tests/testbed/test_isolation.py`). Only
+`testbed/game.py` imports Ursina, lazily; everything else there is pure logic and is tested
+like the rest of the code.
 
 ## 3. Interfaces over implementations
 

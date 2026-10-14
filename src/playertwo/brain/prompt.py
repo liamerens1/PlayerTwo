@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from playertwo.actions import GameProfile
+from playertwo.actions import GameProfile, History
 
 FRAME_PROMPT = "This is the current screenshot. Choose the next action."
 REASON_MAX_CHARS = 80
@@ -22,6 +22,33 @@ def build_system_prompt(profile: GameProfile) -> str:
         "Reply with ONE action as JSON only, no other text:\n"
         f'{{"action": {names}, "reason": "<at most 8 words>"}}'
     )
+
+
+def build_frame_prompt(history: History | None = None) -> str:
+    """The per-frame prompt: the model's recent actions (Tier 1 memory), then the ask.
+
+    One short line per action, since small models get worse with long context. The
+    model's own past reasons are deliberately left out: qwen3-vl 2B copied them word for
+    word ("positioned in front of a wall") and repeated the old action with the target
+    straight ahead. Level 1 went from 20/20 without memory to 1/19 with reasons in the
+    history; with action and effect only it kept walking at the target (offline check).
+    """
+    if history is None or not history.recent:
+        return FRAME_PROMPT
+    lines = ["Your last actions, oldest first:"]
+    for past in history.recent:
+        if past.screen_changed is None:
+            result = ""
+        else:
+            result = " -> screen changed" if past.screen_changed else " -> NO change"
+        lines.append(f"- {past.action}{result}")
+    if history.stuck_action is not None:
+        lines.append(
+            f"{history.stuck_action} did nothing {history.stuck_repeats} times in a row: "
+            "you are probably stuck. Choose a different action."
+        )
+    lines.append(FRAME_PROMPT)
+    return "\n".join(lines)
 
 
 def decision_schema(profile: GameProfile) -> dict[str, Any]:

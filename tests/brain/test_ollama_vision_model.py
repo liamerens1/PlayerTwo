@@ -10,8 +10,15 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from playertwo.actions import GameProfile
-from playertwo.brain import BrainUnavailableError, OllamaVisionModel, encode_jpeg
+from playertwo.actions import GameProfile, History, PastAction
+from playertwo.brain import (
+    FRAME_PROMPT,
+    BrainUnavailableError,
+    OllamaVisionModel,
+    build_frame_prompt,
+    build_system_prompt,
+    encode_jpeg,
+)
 from playertwo.config import BrainSettings
 from playertwo.types import Frame
 
@@ -82,6 +89,18 @@ def test_request_carries_frame_prompt_schema_and_options(profile: GameProfile) -
     image = Image.open(io.BytesIO(base64.b64decode(sent["images"][0])))
     assert image.format == "JPEG"
     assert image.size == (64, 36)
+    assert sent["prompt"] == FRAME_PROMPT
+
+
+def test_history_goes_into_the_prompt_not_the_system_prompt(profile: GameProfile) -> None:
+    model, fake = _model(lambda _: _reply('{"action": "turn_left", "reason": "x"}'))
+    history = History((PastAction("move_forward", "go", False),) * 3, "move_forward", 3)
+    model.decide(_frame(), profile, history)
+    sent = fake.requests[0]
+    assert sent["prompt"] == build_frame_prompt(history)
+    assert "move_forward did nothing 3 times" in sent["prompt"]
+    # The system prompt stays identical from call to call.
+    assert sent["system"] == build_system_prompt(profile)
 
 
 def test_timing_is_recorded(profile: GameProfile) -> None:

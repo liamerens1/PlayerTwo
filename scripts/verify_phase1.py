@@ -35,7 +35,8 @@ from playertwo.actions import Decision, GameProfile, HoldAction
 from playertwo.capture import DxcamFrameSource
 from playertwo.config import Settings
 from playertwo.hands import ActionExecutor, DirectInputDriver
-from playertwo.safety import KillSwitch, SafetyGate, WindowGuard, foreground_window_title
+from playertwo.safety import KillSwitch, SafetyGate, WindowGuard
+from playertwo.win32 import foreground_window
 
 ROOT = Path(__file__).resolve().parents[1]
 HOLD_ACTION = "hold_key"
@@ -158,7 +159,7 @@ def check_dropped_when_unfocused(
     executor: ActionExecutor, driver: CountingDriver, guard: WindowGuard, key: str
 ) -> bool:
     print("\n[2/4] Input dropped while another window is focused")
-    title = foreground_window_title()
+    title = foreground_window().title
     print(f"  focused window: {title!r}")
     if guard.game_is_focused():
         print(
@@ -168,7 +169,7 @@ def check_dropped_when_unfocused(
         if not _wait_until(lambda: not guard.game_is_focused(), FOCUS_TIMEOUT_SECONDS):
             print("  FAIL: the target window stayed focused")
             return False
-        print(f"  focused window: {foreground_window_title()!r}")
+        print(f"  focused window: {foreground_window().title!r}")
     executor.execute(Decision(action=HOLD_ACTION))
     sent = list(driver.calls)
     ok = sent == [] and not _key_is_down(key)
@@ -207,7 +208,7 @@ def check_release_on_focus_loss(
     released = not _key_is_down(key)
     ok = released and elapsed < 9.0 and not guard.game_is_focused()
     print(f"  hold ended after {elapsed:.2f} s, key released: {released}")
-    print(f"  focused window now: {foreground_window_title()!r}")
+    print(f"  focused window now: {foreground_window().title!r}")
     print("  PASS" if ok else "  FAIL: the hold ran its full length or the key is still down")
     return ok
 

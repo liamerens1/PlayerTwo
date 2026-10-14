@@ -9,9 +9,9 @@ import ollama
 from PIL import Image
 from pydantic import ValidationError
 
-from playertwo.actions import WAIT_ACTION, Decision, GameProfile
+from playertwo.actions import WAIT_ACTION, Decision, GameProfile, History
 from playertwo.brain.game_model import BrainUnavailableError, GameModel, InferenceStats
-from playertwo.brain.prompt import FRAME_PROMPT, build_system_prompt, decision_schema
+from playertwo.brain.prompt import build_frame_prompt, build_system_prompt, decision_schema
 from playertwo.config import BrainSettings
 from playertwo.types import Frame
 
@@ -85,13 +85,15 @@ class OllamaVisionModel(GameModel):
             return
         logger.info("model %s unloaded", self._settings.model)
 
-    def decide(self, frame: Frame, profile: GameProfile) -> Decision:
+    def decide(
+        self, frame: Frame, profile: GameProfile, history: History | None = None
+    ) -> Decision:
         start = time.monotonic()
         try:
             reply = self._client.generate(
                 model=self._settings.model,
                 system=build_system_prompt(profile),
-                prompt=FRAME_PROMPT,
+                prompt=build_frame_prompt(history),
                 images=[encode_jpeg(frame)],
                 format=decision_schema(profile),
                 options={
