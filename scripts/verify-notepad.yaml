@@ -1,0 +1,17 @@
+# Used only by scripts/verify_phase1.py, against Notepad. Never point this at a game.
+# The long hold exists so there is time to press F12 or alt-tab while the key is down.
+
+name: verify-notepad
+description: Phase 1 manual verification profile.
+goal: None. This profile is never given to a model.
+max_hold_seconds: 10
+
+actions:
+  hold_key:
+    type: hold
+    key: w
+    seconds: 10
+    description: Hold one key long enough to interrupt it.
+  wait:
+    type: wait
+    description: Do nothing.
