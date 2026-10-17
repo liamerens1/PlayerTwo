@@ -140,13 +140,26 @@ marked _(proposed)_ haven't been agreed yet; confirm them before the phase start
   3. Measure on the testbed against "model picks the action".
 - **Done bar** _(proposed)_: level 2 success rate with look-then-steer measured for each
   model against the Phase 4/5 baseline (about 5%), same seeds; levels 3–5 measured too.
-- **Status:** ⏭ next. Added 2026-10-17 (Liam, option A) after level 2 showed the
-  models see the cube but pick the wrong turn. **Step 1 done** (testbed `--survey`, 153
-  frames graded on the yellow pixels): asked for a box as JSON, qwen3-vl 2B gets
-  visible/not visible right 152/153 with no false sightings and the steering side right
-  102/103, position error under 1% of the width, 0.61 s; 4B is as accurate at 0.87 s.
-  Asking left/centre/right is much worse (41 false sightings for 2B). qwen2.5vl's boxes
-  use a different coordinate space (about 1,200 px wide). Step 2 uses 2B + box JSON.
+- **Status:** ✅ done. Added 2026-10-17 (Liam, option A) after level 2 showed the
+  models see the cube but pick the wrong turn. Perception test (step 1, 153 survey frames):
+  asked for a box as JSON, the 2B located the cube right ~99% of the time with no false
+  sightings. Built (step 2): profile `target:`, `GameModel.locate()`, the pure
+  `playertwo.steering.Steerer` (searches towards the last-seen side; 10° nudges near the
+  centre and after an overshoot; sidestep detours when blocked), `--no-steer`, `--trace`.
+  Results (step 3; testbed, memory on, seeds 1–20):
+
+  | Level           | 2B steer      | Median | 4B steer | 7B steer\* | Model picks (any) |
+  | --------------- | ------------- | ------ | -------- | ---------- | ----------------- |
+  | 1 open field    | 20/20         | 7.4 s  |          |            | 20/20             |
+  | 2 off-screen    | 20/20         | 7.5 s  | 20/20    | 20/20      | 1–2/20            |
+  | 3 wall          | 19/20         | 22.4 s |          |            |                   |
+  | 4 obstacles     | 18/20         | 25.3 s |          |            |                   |
+  | 5 pit           | 0/20 (fell)   |        |          |            |                   |
+
+  \*Qwen2.5-VL reports boxes in pixels of an ~1,205-wide image: `brain.box_scale: 1205`.
+  The 2B stays the default (fastest: 0.72 s a look; 4B 1.01 s, 7B 1.26 s). Steering knows
+  nothing about hazards, so it walks into the pit (→ Phase 8). Detours are slow: three
+  wasted steps before the stuck check fires (→ Phase 7).
 
 ### 7. Optimise — `feat/optimize/7`
 
@@ -155,7 +168,7 @@ marked _(proposed)_ haven't been agreed yet; confirm them before the phase start
   then stands about 0.9 s while the next decision is made).
 - **Done bar:** every change is judged on testbed numbers. One is kept only if it improves
   success rate or decisions/s without making the other worse _(proposed)_.
-- **Status:** planned. Known lever: image tokens are about 70% of decision time
+- **Status:** ⏭ next. Known lever: image tokens are about 70% of decision time
   (0.38 of 0.56 s at 640 px).
 
 ### 8. Lessons journal (Tier 2) — `feat/lessons/8`
