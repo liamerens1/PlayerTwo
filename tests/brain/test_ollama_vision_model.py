@@ -172,10 +172,26 @@ def test_server_down_raises_unavailable(profile: GameProfile) -> None:
         model.decide(_frame(), profile)
 
 
-def test_warm_up_loads_model_without_a_prompt() -> None:
+def test_warm_up_with_a_profile_makes_one_throwaway_decision(profile: GameProfile) -> None:
+    # Regression: after a text-only load, a freshly pulled 4B / 7B model took over 10 s on
+    # its first real decisions (Phase 5), timing out the start of a run.
+    model, fake = _model(lambda _: _reply(OK_REPLY), keep_alive="15m", max_reply_tokens=48)
+    model.warm_up(profile)
+    (sent,) = fake.requests
+    assert sent["model"] == "qwen3-vl:2b-instruct"
+    assert sent["keep_alive"] == "15m"
+    # Exactly what a decision sends: same system prompt, reply format and options.
+    assert sent["system"] == build_system_prompt(profile)
+    assert sent["format"]["properties"]["action"]["enum"] == profile.action_names
+    assert sent["options"]["num_predict"] == 48
+    image = Image.open(io.BytesIO(base64.b64decode(sent["images"][0])))
+    assert image.size == (640, 360)  # the usual capture size
+    assert model.last_stats is None  # a throwaway: not counted as a decision
+
+
+def test_warm_up_without_a_profile_just_loads() -> None:
     model, fake = _model(lambda _: _reply(""), keep_alive="15m")
     model.warm_up()
-    # No prompt and no images: Ollama just loads the model and keeps it resident.
     assert fake.requests == [
         {"model": "qwen3-vl:2b-instruct", "stream": False, "keep_alive": "15m"}
     ]

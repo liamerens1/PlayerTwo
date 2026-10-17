@@ -76,12 +76,17 @@ behaviour keeps the character moving smoothly while the next decision is compute
 
 On an 8 GB card, the trade-off between smart and fast is the central constraint:
 
-| Model         | ~VRAM (Q4) | Role                                     |
-| ------------- | ---------- | ---------------------------------------- |
-| Qwen3-VL 2B   | ~1.9 GB    | Start here. ~0.6 s/decision, crude play. |
-| Qwen3-VL 4B   | ~3.3 GB    | Step up. Modern, long context.           |
-| Qwen2.5-VL 7B | ~5–6 GB    | Smarter, slower, tight fit.              |
-| MiniCPM-V 8B  | ~6 GB      | Alternative.                             |
+Measured in Phase 5 next to the testbed (whole-card GPU memory, act-then-look):
+
+| Model         | Download | Peak GPU with the testbed | Decision | Role                                   |
+| ------------- | -------- | ------------------------- | -------- | -------------------------------------- |
+| Qwen3-VL 2B   | 1.9 GB   | ~4.3 GB                   | ~0.7 s   | **Default.** Sees as well as the 4B.   |
+| Qwen3-VL 4B   | 3.3 GB   | ~5.8 GB                   | ~0.83 s  | Same testbed scores, slower.           |
+| Qwen2.5-VL 7B | 6.0 GB   | ~7.7 GB                   | ~1.05 s  | Same scores; no room left for a game.  |
+| MiniCPM-V 8B  | ~6 GB    | not tried                 |          | Alternative.                           |
+
+On the testbed, bigger models didn't play better: they all see the target, and they all
+pick the wrong turn when it starts off-screen. Phase 6 splits seeing from acting.
 
 Use **non-thinking ("instruct") tags**, such as `qwen3-vl:2b-instruct`. Thinking variants
 write paragraphs of reasoning before every answer, and Ollama's `think: false` didn't stop
@@ -130,7 +135,7 @@ model repeated turns past the target and spun in circles. Each step now takes de
 action + settle (about 1–1.6 s with a 0.8 s hold), but every decision sees what its last
 action did. The pipelined behaviour is still available with `wait_for_result: false`.
 Keeping a key held across decisions that repeat the same action ("action persistence")
-is planned for Phase 6.
+is planned for Phase 7.
 
 ## Safety model
 
@@ -149,7 +154,7 @@ is planned for Phase 6.
 ## Deferred, with reasons
 
 - **Fine-tuned / specialised model**: the long-term route to good real-time play. Needs
-  recorded gameplay first (Phase 9); imitation learning is Phase 10. Reinforcement
+  recorded gameplay first (Phase 10); imitation learning is Phase 11. Reinforcement
   learning is parked: see [`roadmap.md`](roadmap.md#parked).
 - **Structured game state** (mod APIs, logs): game-specific; added per game when available.
 - **Game memory reading**: off by default (see `CLAUDE.md`).

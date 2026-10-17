@@ -69,3 +69,11 @@ def test_shipped_config_and_profiles_are_valid() -> None:
         assert testbed.actions[name] == walker.actions[name].model_copy(
             update={"description": testbed.actions[name].description}
         )
+
+
+def test_default_host_avoids_the_windows_localhost_delay() -> None:
+    # "localhost" tries IPv6 first; Ollama listens on IPv4 only, so each new connection
+    # took about 2 s (measured in Phase 5). The shipped config must not reintroduce it.
+    assert BrainSettings().host == "http://127.0.0.1:11434"
+    root = Path(__file__).resolve().parents[2]
+    assert Settings.load(root / "config" / "config.yaml").brain.host == "http://127.0.0.1:11434"

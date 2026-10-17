@@ -61,7 +61,7 @@ class FakeModel:
         self.unloaded = False
         FakeModel.instances.append(self)
 
-    def warm_up(self) -> None:
+    def warm_up(self, profile: object = None) -> None:
         pass
 
     def unload(self) -> None:
@@ -85,3 +85,11 @@ def test_model_is_unloaded_when_setup_fails_after_warm_up(
         main(["--target-process", "no-such-game.exe"])
     (model,) = FakeModel.instances
     assert model.unloaded
+
+
+def test_model_override_is_shown_and_validated(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["--check", "--model", "qwen3-vl:4b-instruct"]) == EXIT_OK
+    assert "model=qwen3-vl:4b-instruct" in capsys.readouterr().out
+    # Overrides go through the same validation as the config file: no cloud models.
+    assert main(["--check", "--model", "qwen3-vl:235b-cloud"]) == EXIT_INVALID_CONFIG
+    assert "not a local model" in capsys.readouterr().out

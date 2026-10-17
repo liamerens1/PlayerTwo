@@ -44,8 +44,9 @@ class GameModel(ABC):
         BrainUnavailableError when the model can't be reached or isn't installed.
         """
 
-    def warm_up(self) -> None:  # noqa: B027 - optional hook, deliberately a no-op
-        """Load the model ahead of the first decision. Default: nothing to do."""
+    def warm_up(self, profile: GameProfile | None = None) -> None:  # noqa: B027 - optional hook
+        """Load the model ahead of the first decision, ideally doing one throwaway
+        decision for `profile` so the first real one isn't slow. Default: nothing to do."""
 
     def unload(self) -> None:  # noqa: B027 - optional hook, deliberately a no-op
         """Free the model's resources at shutdown. Must not raise. Default: nothing."""

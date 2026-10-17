@@ -30,7 +30,7 @@ verify_phase1_frame.png
 # Testbed episode results (python -m testbed): one .jsonl per run, kept locally.
 testbed/results/
 
-# Recorded gameplay (Phase 9): large, personal, never committed.
+# Recorded gameplay (Phase 10): large, personal, never committed.
 recordings/
 
 *.log

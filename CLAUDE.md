@@ -110,6 +110,7 @@ pip install -e ".[dev,testbed]"    # the test game (Ursina)
 python -m testbed --level 1        # play it (WASD + mouse); --autopilot to watch, no input
 python -m playertwo --profile profiles/testbed.yaml --target-process python.exe --target-window "PlayerTwo Testbed"
 python scripts\score_testbed.py --all   # success rate per level, per --tag
+python scripts\run_testbed_matrix.py --models qwen3-vl:2b-instruct qwen3-vl:4b-instruct   # compare models (sends input)
 ```
 
 The testbed (`testbed/`) and PlayerTwo (`src/playertwo/`) never import each other; they
@@ -127,12 +128,13 @@ the game ladder and what's parked. Keep the two in sync; reorder only with Liam'
 | 2     | `feat/brain/2`          | Ollama vision adapter (qwen3-vl:2b-instruct, ~0.56 s/decision): one validated decision per frame. | Done    |
 | 3     | `feat/game-loop/3`      | Threaded capture → brain → hands loop, plus the terminal-input safety fix.                 | Done    |
 | 4     | `feat/testbed/4`        | Testbed game + Tier 1 short-term memory + Phase 3 review items. Level 1: 20/20 with and without memory; level 2: 1/20. | Done    |
-| 5     | `feat/model-upgrades/5` | qwen3-vl:4b-instruct, qwen2.5vl:7b, judged on testbed success per level, decisions/s, VRAM. | Next    |
-| 6     | `feat/optimize/6`       | Frame size, change detection, action persistence, judged on testbed numbers.               | Planned |
-| 7     | `feat/lessons/7`        | Lessons journal (Tier 2): failure detection → per-game lessons in the prompt. Level 5 (pit) success improves across runs. | Planned |
-| 8     | `feat/first-game/8`     | First real game: A Short Hike (fallback SuperTuxKart). Profile + prompt iteration.         | Planned |
-| 9     | `feat/recording/9`      | Record frame + human input pairs while Liam plays.                                         | Planned |
-| 10    | `feat/imitation/10`     | Imitation learning (Tier 3): LoRA fine-tune a small vision model on the recordings.        | Planned |
+| 5     | `feat/model-upgrades/5` | 4B and 7B vs 2B on the testbed: same success, slower, more VRAM. Default stays qwen3-vl:2b-instruct. | Done    |
+| 6     | `feat/look-steer/6`     | Look, then steer: the model only locates the target; code turns that into actions. Level 2 vs the ~5% baseline. | Next    |
+| 7     | `feat/optimize/7`       | Frame size, change detection, action persistence, judged on testbed numbers.               | Planned |
+| 8     | `feat/lessons/8`        | Lessons journal (Tier 2): failure detection → per-game lessons in the prompt. Level 5 (pit) success improves across runs. | Planned |
+| 9     | `feat/first-game/9`     | First real game: A Short Hike (fallback SuperTuxKart). Profile + prompt iteration.         | Planned |
+| 10    | `feat/recording/10`     | Record frame + human input pairs while Liam plays.                                         | Planned |
+| 11    | `feat/imitation/11`     | Imitation learning (Tier 3): LoRA fine-tune a small vision model on the recordings.        | Planned |
 
 Parked: reinforcement learning (Tier 4), game memory reading, online / anti-cheat games.
 Reasons in the roadmap.

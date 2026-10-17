@@ -38,11 +38,20 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         "--screenshots", type=Path, help="save one screenshot per episode into this folder"
     )
     parser.add_argument(
+        "--survey",
+        type=int,
+        default=0,
+        metavar="N",
+        help="with --screenshots: shoot each start position from N headings, don't play",
+    )
+    parser.add_argument(
         "--verbose", action="store_true", help="log every mouse turn (to check sensitivity)"
     )
     args = parser.parse_args(argv)
     if args.episodes < 1:
         parser.error("--episodes must be at least 1")
+    if args.survey and args.screenshots is None:
+        parser.error("--survey needs --screenshots DIR")
     if args.timeout is not None and args.timeout <= 0:
         parser.error("--timeout must be positive")
     return args
@@ -66,6 +75,7 @@ def main(argv: list[str] | None = None) -> int:
             tag=args.tag,
             autopilot=args.autopilot,
             screenshot_dir=args.screenshots,
+            survey_headings=args.survey,
         )
     )
     return 0
