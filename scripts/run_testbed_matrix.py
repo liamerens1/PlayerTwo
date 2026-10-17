@@ -9,7 +9,7 @@ SENDS REAL KEYBOARD AND MOUSE INPUT, through PlayerTwo and only to the testbed w
 (F12 stops PlayerTwo; alt-tab pauses both). For each run it:
 
 1. waits for Enter (skip with --no-pause), so nothing starts without you;
-2. starts PlayerTwo with --model, --no-memory if asked, and --stats-json;
+2. starts PlayerTwo with --model, --no-memory / --no-steer if asked, and --stats-json;
 3. opens the testbed once PlayerTwo is ready. Click its window to start, then leave the
    mouse alone: the mouse turns the character;
 4. waits for the episodes, then for PlayerTwo to stop by itself (it does a few seconds
@@ -54,22 +54,34 @@ class Combo:
     model: str
     level: int
     memory: bool
+    steer: bool = False
+    """Look, then steer (the profile's target); False: the model picks each action."""
 
     @property
     def tag(self) -> str:
-        return f"{self.model} L{self.level} mem-{'on' if self.memory else 'off'}"
+        steer = " steer" if self.steer else ""
+        return f"{self.model} L{self.level} mem-{'on' if self.memory else 'off'}{steer}"
 
     @property
     def slug(self) -> str:
         """For file names: no ':' or '/'."""
         safe = self.model.replace(":", "_").replace("/", "_")
-        return f"{safe}-l{self.level}-mem-{'on' if self.memory else 'off'}"
+        steer = "-steer" if self.steer else ""
+        return f"{safe}-l{self.level}-mem-{'on' if self.memory else 'off'}{steer}"
 
 
-def plan(models: list[str], levels: list[int], memory: str) -> list[Combo]:
-    """Every combination, grouped by model so each model loads once per memory setting."""
-    settings = {"on": [True], "off": [False], "both": [True, False]}[memory]
-    return [Combo(m, lvl, mem) for m in models for lvl in levels for mem in settings]
+ON_OFF = {"on": [True], "off": [False], "both": [True, False]}
+
+
+def plan(models: list[str], levels: list[int], memory: str, steer: str = "off") -> list[Combo]:
+    """Every combination, grouped by model so each model's runs come together."""
+    return [
+        Combo(m, lvl, mem, st)
+        for m in models
+        for lvl in levels
+        for st in ON_OFF[steer]
+        for mem in ON_OFF[memory]
+    ]
 
 
 @dataclass(frozen=True)
@@ -85,9 +97,9 @@ class RunOutcome:
 def format_matrix(outcomes: list[RunOutcome]) -> str:
     """A Markdown table, one row per run."""
     rows = [
-        "| Model | Level | Memory | Success | Median time | Time-outs | Fell "
+        "| Model | Level | Memory | Mode | Success | Median time | Time-outs | Fell "
         "| Decision (median) | Decisions/min | Peak GPU MiB | Model+game MiB |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for o in outcomes:
         wins = [r.seconds for r in o.results if r.outcome is Outcome.SUCCESS]
@@ -105,6 +117,7 @@ def format_matrix(outcomes: list[RunOutcome]) -> str:
         )
         rows.append(
             f"| {o.combo.model} | {o.combo.level} | {'on' if o.combo.memory else 'off'} "
+            f"| {'steer' if o.combo.steer else 'pick'} "
             f"| {len(wins)}/{n} | {median_time} | {timeouts} | {fell} "
             f"| {f'{decide:.2f} s' if isinstance(decide, float) else '-'} "
             f"| {per_minute if per_minute is not None else '-'} "
@@ -184,9 +197,15 @@ def run_one(combo: Combo, args: argparse.Namespace, out_dir: Path) -> RunOutcome
     stats = out_dir / f"{combo.slug}-stats.json"
     results_dir = out_dir / combo.slug
     p2_cmd = [sys.executable, "-u", "-m", "playertwo", "--profile", PROFILE, *TARGET]
+    if args.config is not None:
+        p2_cmd += ["--config", str(args.config)]
     p2_cmd += ["--model", combo.model, "--stats-json", str(stats)]
+    if args.trace:
+        p2_cmd += ["--trace", str(out_dir / f"{combo.slug}-trace")]
     if not combo.memory:
         p2_cmd.append("--no-memory")
+    if not combo.steer:
+        p2_cmd.append("--no-steer")
     tb_cmd = [sys.executable, "-u", "-m", "testbed", "--level", str(combo.level)]
     tb_cmd += ["--episodes", str(args.episodes), "--seed", str(args.seed), "--tag", combo.tag]
     tb_cmd += ["--results-dir", str(results_dir)]
@@ -221,8 +240,20 @@ def main() -> int:
     parser.add_argument("--models", nargs="+", required=True, help="Ollama model names")
     parser.add_argument("--levels", nargs="+", type=int, default=[1, 2])
     parser.add_argument("--memory", choices=["on", "off", "both"], default="both")
+    parser.add_argument(
+        "--steer",
+        choices=["on", "off", "both"],
+        default="on",
+        help="look, then steer (on), the model picks each action (off), or compare (both)",
+    )
     parser.add_argument("--episodes", type=int, default=20)
     parser.add_argument("--seed", type=int, default=1)
+    parser.add_argument(
+        "--config", type=Path, help="PlayerTwo config to use (default: config/config.yaml)"
+    )
+    parser.add_argument(
+        "--trace", action="store_true", help="save each run's frames and decisions (debugging)"
+    )
     parser.add_argument(
         "--no-pause", action="store_true", help="don't wait for Enter before each run"
     )
@@ -240,7 +271,7 @@ def main() -> int:
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     out_dir = RESULTS_DIR / f"matrix-{stamp}"
     out_dir.mkdir(parents=True, exist_ok=True)
-    combos = plan(args.models, args.levels, args.memory)
+    combos = plan(args.models, args.levels, args.memory, args.steer)
     print(f"{len(combos)} runs of {args.episodes} episodes. Output: {out_dir}")
     print("This sends real keyboard and mouse input to the testbed window. F12 stops PlayerTwo.")
 

@@ -2,11 +2,12 @@ import itertools
 import threading
 import time
 from collections.abc import Callable
+from pathlib import Path
 
 import numpy as np
 import pytest
 
-from playertwo.actions import Decision, GameProfile, History, PastAction
+from playertwo.actions import Decision, GameProfile, History, PastAction, Sighting, SteerTarget
 from playertwo.brain import BrainUnavailableError, GameModel, InferenceStats
 from playertwo.capture import ChangeDetector, FrameSource
 from playertwo.config import LoopSettings, MemorySettings
@@ -104,6 +105,7 @@ def _loop(
     focused: Callable[[], bool] = lambda: True,
     wait_for_result: bool = True,
     settle: float = 0.03,
+    steer: bool = True,
 ) -> tuple[GameLoop, RecordingDriver, threading.Event]:
     driver = RecordingDriver()
     stop = threading.Event()
@@ -116,7 +118,10 @@ def _loop(
         profile,
         stop,
         LoopSettings(
-            max_decision_age_seconds=max_age, wait_for_result=wait_for_result, settle_seconds=settle
+            max_decision_age_seconds=max_age,
+            wait_for_result=wait_for_result,
+            settle_seconds=settle,
+            steer=steer,
         ),
         fps=100,
         republish_seconds=republish,
@@ -371,3 +376,131 @@ def test_act_then_look_keeps_going_when_actions_are_dropped(profile: GameProfile
     _run_for(loop, stop, 0.3)
     assert model.calls >= 3  # a dropped action still releases the brain
     assert driver.calls == []
+
+
+STEER = SteerTarget(
+    description="the yellow cube",
+    forward="move_forward",
+    turn_left="turn_left",
+    turn_right="turn_right",
+)
+
+
+class LocatingModel(ScriptedModel):
+    """Says the target is at `x` (None: not visible); falls back to `action` if asked to
+    decide."""
+
+    can_locate = True
+
+    def __init__(self, x: float | None, action: str = "interact") -> None:
+        super().__init__(action)
+        self.x = x
+        self.locates = 0
+
+    def locate(self, frame: Frame, target: SteerTarget) -> Sighting | None:
+        self.locates += 1
+        self.last_stats = InferenceStats(total_seconds=0.0)
+        if self.x is None:
+            return Sighting(visible=False)
+        return Sighting(visible=True, x=self.x, box=(self.x - 0.05, 0.3, self.x + 0.05, 0.5))
+
+
+def _with_target(profile: GameProfile) -> GameProfile:
+    return profile.model_copy(update={"target": STEER, "max_hold_seconds": 0.02})
+
+
+def test_with_a_target_the_model_locates_and_steering_picks_the_action(
+    profile: GameProfile,
+) -> None:
+    model = LocatingModel(x=0.9)
+    loop, driver, stop = _loop(_with_target(profile), model=model)
+    _run_for(loop, stop, 0.3)
+    assert model.locates > 0 and model.calls == 0  # decide never asked
+    assert loop.stats.steered == loop.stats.decisions
+    assert loop.stats.target_seen == loop.stats.steered
+    assert ("mouse", "150", "0") in driver.calls  # turn_right in simple-walker
+
+
+def test_steering_off_lets_the_model_pick(profile: GameProfile) -> None:
+    model = LocatingModel(x=0.9)
+    loop, driver, stop = _loop(_with_target(profile), model=model, steer=False)
+    _run_for(loop, stop, 0.2)
+    assert model.locates == 0 and model.calls > 0
+    assert loop.stats.steered == 0
+    assert ("press", "e") in driver.calls
+
+
+def test_no_target_or_a_model_that_cant_locate_means_no_steering(profile: GameProfile) -> None:
+    model = LocatingModel(x=0.9)
+    loop, _, stop = _loop(profile, model=model)  # simple-walker has no target
+    _run_for(loop, stop, 0.2)
+    assert model.locates == 0
+    plain = ScriptedModel()  # can_locate is False
+    loop, _, stop = _loop(_with_target(profile), model=plain)
+    _run_for(loop, stop, 0.2)
+    assert plain.calls > 0 and loop.stats.steered == 0
+
+
+def test_stuck_while_steering_hands_over_to_the_model(profile: GameProfile) -> None:
+    # Centred target, but the screen never changes (walking into a wall): after the stuck
+    # detector fires, the model picks the action with the stuck hint instead.
+    model = LocatingModel(x=0.5, action="turn_left")
+    loop, _, stop = _loop(
+        _with_target(profile), source=FrozenSource(), model=model, memory=QUICK_MEMORY
+    )
+    _run_for(loop, stop, 0.6)
+    assert model.locates >= QUICK_MEMORY.stuck_repeats
+    assert model.calls > 0  # the fallback
+    stuck = [h for h in model.histories if h is not None and h.stuck_action == "move_forward"]
+    assert stuck
+
+
+def test_tracer_records_steering_decisions(profile: GameProfile, tmp_path: Path) -> None:
+    from playertwo.orchestrator import Tracer
+
+    model = LocatingModel(x=0.9)
+    driver = RecordingDriver()
+    stop = threading.Event()
+    target_profile = _with_target(profile)
+    loop = GameLoop(
+        ChangingSource(),
+        ChangeDetector(threshold=0.0),
+        model,
+        ActionExecutor(driver, target_profile, stop, OpenGate()),
+        target_profile,
+        stop,
+        LoopSettings(settle_seconds=0.03),
+        fps=100,
+        republish_seconds=10.0,
+        tracer=Tracer(tmp_path),
+    )
+    _run_for(loop, stop, 0.2)
+    lines = (tmp_path / "trace.jsonl").read_text().splitlines()
+    assert len(lines) == loop.stats.decisions > 0
+    assert '"mode": "steer"' in lines[0] and '"x": 0.9' in lines[0]
+
+
+def test_stuck_steering_detours_sideways_when_the_profile_can_strafe(
+    profile: GameProfile,
+) -> None:
+    from playertwo.actions import HoldAction
+
+    strafes = {
+        "strafe_left": HoldAction(type="hold", key="a", seconds=0.02, for_model=False),
+        "strafe_right": HoldAction(type="hold", key="d", seconds=0.02, for_model=False),
+    }
+    detour = STEER.model_copy(
+        update={"sidestep_left": "strafe_left", "sidestep_right": "strafe_right"}
+    )
+    can_strafe = profile.model_copy(
+        update={
+            "actions": {**profile.actions, **strafes},
+            "target": detour,
+            "max_hold_seconds": 0.02,
+        }
+    )
+    model = LocatingModel(x=0.55, action="turn_left")  # centred, right half; screen frozen
+    loop, driver, stop = _loop(can_strafe, source=FrozenSource(), model=model, memory=QUICK_MEMORY)
+    _run_for(loop, stop, 0.8)
+    assert ("down", "d") in driver.calls  # sidestepped right, towards the target's side
+    assert model.calls == 0  # the model was never asked to pick

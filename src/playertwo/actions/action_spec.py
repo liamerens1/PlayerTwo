@@ -9,6 +9,9 @@ class _ActionBase(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     description: str = ""
+    for_model: bool = True
+    """Offered to the model when it picks actions. False: only steering uses it (e.g. a
+    small corrective turn), so the model's choices stay the same with or without it."""
 
 
 class HoldAction(_ActionBase):

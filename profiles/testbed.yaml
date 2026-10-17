@@ -32,3 +32,47 @@ actions:
   wait:
     type: wait
     description: Do nothing this turn.
+  # Steering-only: small turns for aiming. Not offered to the model when it picks actions.
+  nudge_left:
+    type: mouse
+    dx: -50
+    description: Turn slightly left (about 10 degrees).
+    for_model: false
+  nudge_right:
+    type: mouse
+    dx: 50
+    description: Turn slightly right (about 10 degrees).
+    for_model: false
+  strafe_left:
+    type: hold
+    key: a
+    seconds: 0.8
+    description: Step sideways to the left.
+    for_model: false
+  strafe_right:
+    type: hold
+    key: d
+    seconds: 0.8
+    description: Step sideways to the right.
+    for_model: false
+
+# Look, then steer: the model only says where the cube is; PlayerTwo picks the action.
+# Turn it off for a run with `--no-steer`.
+target:
+  description: the yellow cube
+  forward: move_forward
+  turn_left: turn_left
+  turn_right: turn_right
+  nudge_left: nudge_left
+  nudge_right: nudge_right
+  # Walk when the cube is in the middle fifth of the screen. Big 30-degree turns swung it
+  # right across that band near the cube (the view orbits the player), so within 0.3 of
+  # the centre, or after an overshoot, steering nudges (about 10 degrees) instead.
+  centre_width: 0.2
+  nudge_zone: 0.3
+  search: left
+  # Blocked (walking forward stopped changing the screen): strafe 3 steps (about 10 units)
+  # towards the cube's side, still facing it, then steer again.
+  sidestep_left: strafe_left
+  sidestep_right: strafe_right
+  detour_steps: 3

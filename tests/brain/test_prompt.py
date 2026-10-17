@@ -75,3 +75,13 @@ def test_frame_prompt_stays_short_with_a_full_memory() -> None:
     entry = PastAction("move_forward", "x" * 40, False)
     history = History((entry,) * 8, stuck_action="move_forward", stuck_repeats=8)
     assert len(build_frame_prompt(history)) < 500
+
+
+def test_steering_only_actions_are_not_offered_to_the_model() -> None:
+    from pathlib import Path
+
+    testbed = GameProfile.load(Path(__file__).resolve().parents[2] / "profiles" / "testbed.yaml")
+    prompt = build_system_prompt(testbed)
+    assert "nudge_left" not in prompt and "nudge_right" not in prompt
+    enum = decision_schema(testbed)["properties"]["action"]["enum"]
+    assert enum == ["move_forward", "turn_left", "turn_right", "wait"]

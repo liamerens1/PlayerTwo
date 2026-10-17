@@ -10,6 +10,7 @@ from playertwo.actions.action_spec import (
 from playertwo.actions.decision import Decision
 from playertwo.actions.game_profile import WAIT_ACTION, GameProfile
 from playertwo.actions.history import History, PastAction
+from playertwo.actions.target import Sighting, SteerTarget
 
 __all__ = [
     "WAIT_ACTION",
@@ -21,5 +22,7 @@ __all__ = [
     "MouseAction",
     "PastAction",
     "PressAction",
+    "Sighting",
+    "SteerTarget",
     "WaitAction",
 ]
