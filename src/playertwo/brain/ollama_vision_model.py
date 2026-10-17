@@ -5,6 +5,7 @@ import logging
 import time
 
 import httpx
+import numpy as np
 import ollama
 from PIL import Image
 from pydantic import ValidationError
@@ -18,6 +19,9 @@ from playertwo.types import Frame
 logger = logging.getLogger(__name__)
 
 JPEG_QUALITY = 85
+WARM_UP_FRAME_SHAPE = (360, 640)
+"""Height, width of the blank frame used to warm up: the usual capture size, so the warm-up
+processes as many image tokens as a real decision."""
 NANOSECONDS = 1e9
 
 
@@ -54,11 +58,24 @@ class OllamaVisionModel(GameModel):
         )
         self._consecutive_failures = 0
 
-    def warm_up(self) -> None:
-        """Load the model into VRAM now; the first load can take tens of seconds."""
+    def warm_up(self, profile: GameProfile | None = None) -> None:
+        """Load the model into VRAM and, given the profile, make one throwaway decision on
+        a blank frame, so the first real decision is as fast as the rest. Can take tens
+        of seconds.
+
+        A text-only load wasn't enough: right after loading, a freshly pulled 4B or 7B
+        model took over 10 s on its first decisions (image encoder, system prompt and
+        reply-format setup all cold), which timed out the start of a run (Phase 5).
+        """
         start = time.monotonic()
+        blank = np.full((*WARM_UP_FRAME_SHAPE, 3), 128, dtype=np.uint8)
         try:
-            self._loader.generate(model=self._settings.model, keep_alive=self._settings.keep_alive)
+            if profile is None:
+                self._loader.generate(
+                    model=self._settings.model, keep_alive=self._settings.keep_alive
+                )
+            else:
+                self._generate(self._loader, blank, profile, None)
         except ollama.ResponseError as exc:
             raise BrainUnavailableError(self._unavailable_message(exc)) from exc
         except ConnectionError as exc:
@@ -90,19 +107,7 @@ class OllamaVisionModel(GameModel):
     ) -> Decision:
         start = time.monotonic()
         try:
-            reply = self._client.generate(
-                model=self._settings.model,
-                system=build_system_prompt(profile),
-                prompt=build_frame_prompt(history),
-                images=[encode_jpeg(frame)],
-                format=decision_schema(profile),
-                options={
-                    "temperature": self._settings.temperature,
-                    "num_ctx": self._settings.context_tokens,
-                    "num_predict": self._settings.max_reply_tokens,
-                },
-                keep_alive=self._settings.keep_alive,
-            )
+            reply = self._generate(self._client, frame, profile, history)
         except ollama.ResponseError as exc:
             if exc.status_code == httpx.codes.NOT_FOUND:
                 raise BrainUnavailableError(self._unavailable_message(exc)) from exc
@@ -137,6 +142,29 @@ class OllamaVisionModel(GameModel):
             decision.reason,
         )
         return decision
+
+    def _generate(
+        self,
+        client: ollama.Client,
+        frame: Frame,
+        profile: GameProfile,
+        history: History | None,
+    ) -> ollama.GenerateResponse:
+        """One decision request. Shared by `decide` and the warm-up, so the warm-up does
+        exactly the work a real decision does."""
+        return client.generate(
+            model=self._settings.model,
+            system=build_system_prompt(profile),
+            prompt=build_frame_prompt(history),
+            images=[encode_jpeg(frame)],
+            format=decision_schema(profile),
+            options={
+                "temperature": self._settings.temperature,
+                "num_ctx": self._settings.context_tokens,
+                "num_predict": self._settings.max_reply_tokens,
+            },
+            keep_alive=self._settings.keep_alive,
+        )
 
     def _parse(self, text: str) -> Decision | None:
         try:

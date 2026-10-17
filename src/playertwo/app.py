@@ -14,7 +14,7 @@ from playertwo.brain import BrainUnavailableError, OllamaVisionModel
 from playertwo.capture import ChangeDetector, DxcamFrameSource, TargetWindow
 from playertwo.config import Settings
 from playertwo.hands import ActionExecutor, DirectInputDriver
-from playertwo.orchestrator import GameLoop, LoopStats
+from playertwo.orchestrator import GameLoop, LoopStats, RunReport
 from playertwo.safety import KillSwitch, SafetyGate, WindowGuard
 
 logger = logging.getLogger("playertwo")
@@ -52,22 +52,38 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         help="turn off short-term memory (the model's recent actions in the prompt)",
     )
     parser.add_argument(
+        "--model", help="Ollama model to use, e.g. qwen3-vl:4b-instruct (overrides brain.model)"
+    )
+    parser.add_argument(
         "--max-seconds",
         type=float,
         help="stop automatically after this many seconds (in addition to the kill switch)",
     )
+    parser.add_argument(
+        "--stats-json",
+        type=Path,
+        help="when stopping, write a summary of the run (model, decisions, timings) here",
+    )
     return parser.parse_args(argv)
+
+
+def _with_overrides(settings: Settings, args: argparse.Namespace) -> Settings:
+    """Apply command-line overrides and validate the result like the config file, so an
+    override can't skip a check (e.g. --model can't name a cloud model)."""
+    data = settings.model_dump()
+    if args.profile is not None:
+        data["profile"] = args.profile
+    if args.no_memory:
+        data["memory"]["enabled"] = False
+    if args.model is not None:
+        data["brain"]["model"] = args.model
+    return Settings.model_validate(data)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     try:
-        settings = Settings.load(args.config)
-        if args.profile is not None:
-            settings = settings.model_copy(update={"profile": args.profile})
-        if args.no_memory:
-            no_memory = settings.memory.model_copy(update={"enabled": False})
-            settings = settings.model_copy(update={"memory": no_memory})
+        settings = _with_overrides(Settings.load(args.config), args)
         profile = GameProfile.load(settings.profile)
     except (OSError, ValidationError) as exc:
         print(f"Invalid config or profile:\n{exc}")
@@ -97,7 +113,7 @@ def main(argv: list[str] | None = None) -> int:
             "PlayerTwo only sends input to that window."
         )
         return EXIT_NO_TARGET
-    return _play(settings, profile, guard, args.max_seconds)
+    return _play(settings, profile, guard, args.max_seconds, args.stats_json)
 
 
 def _play(
@@ -105,12 +121,13 @@ def _play(
     profile: GameProfile,
     guard: WindowGuard,
     max_seconds: float | None,
+    stats_json: Path | None = None,
 ) -> int:
     stop = threading.Event()
     model = OllamaVisionModel(settings.brain)
     print(f"Loading {settings.brain.model}...")
     try:
-        model.warm_up()
+        model.warm_up(profile)
     except BrainUnavailableError as exc:
         print(f"Brain unavailable: {exc}")
         return EXIT_BRAIN_UNAVAILABLE
@@ -122,6 +139,7 @@ def _play(
     executor: ActionExecutor | None = None
     loop: GameLoop | None = None
     timer: threading.Timer | None = None
+    started: float | None = None
     exit_code = EXIT_OK
     try:
         target = TargetWindow(guard.matches)
@@ -161,6 +179,7 @@ def _play(
         memory = "on" if settings.memory.enabled else "off"
         print(f"Playing in: {guard.describe()}. Press {key} to stop. Short-term memory {memory}.")
         print("Input is only sent while that window is focused; alt-tab out to pause.")
+        started = time.monotonic()
         loop.run()
     except BrainUnavailableError as exc:
         print(f"Brain unavailable: {exc}")
@@ -169,6 +188,7 @@ def _play(
         print("Interrupted.")
     finally:
         stop.set()
+        ended = time.monotonic()
         if timer is not None:
             timer.cancel()
         if executor is not None:
@@ -182,6 +202,19 @@ def _play(
         model.unload()
     if loop is not None:
         print(_summary(loop.stats))
+        if stats_json is not None and started is not None:
+            report = RunReport.from_stats(
+                loop.stats,
+                model=settings.brain.model,
+                profile=profile.name,
+                memory=settings.memory.enabled,
+                act_then_look=settings.loop.wait_for_result,
+                seconds=ended - started,
+                exit_code=exit_code,
+            )
+            stats_json.parent.mkdir(parents=True, exist_ok=True)
+            stats_json.write_text(report.model_dump_json(indent=2), encoding="utf-8")
+            print(f"Run summary written to {stats_json}")
     return exit_code
 
 

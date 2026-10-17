@@ -17,7 +17,9 @@ class _Section(BaseModel):
 class BrainSettings(_Section):
     provider: Literal["ollama"] = "ollama"
     model: str = "qwen3-vl:2b-instruct"
-    host: str = "http://localhost:11434"
+    host: str = "http://127.0.0.1:11434"
+    """127.0.0.1, not localhost: on Windows "localhost" tries IPv6 first, and Ollama listens
+    on IPv4 only, so every new connection waited about 2 s before falling back (Phase 5)."""
     temperature: float = Field(default=0.2, ge=0, le=2)
     context_tokens: int = Field(default=4096, gt=0)
     max_reply_tokens: int = Field(default=64, ge=8, le=1024)
@@ -81,8 +83,11 @@ class SafetySettings(_Section):
 
 
 class LoopSettings(_Section):
-    max_decision_age_seconds: float = Field(default=1.5, gt=0, le=30)
-    """Hands drops a decision whose frame was captured longer ago than this."""
+    max_decision_age_seconds: float = Field(default=5.0, gt=0, le=30)
+    """Hands drops a decision whose frame was captured longer ago than this. With
+    act-then-look a decision's age is about the model's thinking time, so this must be
+    above the slowest model's decision time (was 1.5 s, set for the 0.6 s 2B model; a
+    7B model takes seconds)."""
     wait_for_result: bool = True
     """Act, then look: decide only once the previous action has finished and settled, on
     the screen as it is then. Off: decide on the newest frame while the previous action

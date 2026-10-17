@@ -100,7 +100,7 @@ def main() -> int:
 
     try:
         start = time.monotonic()
-        model.warm_up()
+        model.warm_up(profile)
         print(f"warm-up (model load): {time.monotonic() - start:.2f} s\n")
 
         totals: list[float] = []
