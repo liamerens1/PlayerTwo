@@ -39,6 +39,8 @@ BANNER_SECONDS = 2.0
 FALL_SECONDS = 0.8
 """How long the falling animation plays before the YOU FELL banner."""
 SCREENSHOT_DELAY_SECONDS = 0.5
+SURVEY_SETTLE_SECONDS = 0.15
+"""Survey mode: frames to let a new heading render before the shot."""
 CHECKER_SIZE = 2.0
 """World units per ground square."""
 
@@ -76,6 +78,9 @@ class GameOptions:
     tag: str = ""
     autopilot: bool = False
     screenshot_dir: Path | None = None
+    survey_headings: int = 0
+    """With screenshot_dir: shoot each start position from this many evenly spaced
+    headings instead of playing (data for testing a model's perception)."""
 
 
 def run_game(options: GameOptions) -> None:
@@ -95,6 +100,7 @@ class TestbedGame:
         self.fall_left = 0.0
         self.fall_depth = 0.0
         self.screenshot_left: float | None = None
+        self.survey_queue: list[float] = []
         self.had_focus: bool | None = None  # None: not checked yet
         self.mouse_look: MouseLook | None = None
         self.u: Any = None  # the ursina module
@@ -297,6 +303,8 @@ class TestbedGame:
         self.clock_text.text = f"{math.ceil(layout.timeout_seconds)} s"
         if self.options.screenshot_dir is not None:
             self.screenshot_left = SCREENSHOT_DELAY_SECONDS
+        n = self.options.survey_headings
+        self.survey_queue = [layout.start_heading + i * 360.0 / n for i in range(1, n)] if n else []
         self._sync_view()
         logger.info("episode %d: level %d seed %d", self.episode_index + 1, layout.level, seed)
 
@@ -332,11 +340,13 @@ class TestbedGame:
         assert self.episode is not None and self.state is not None
         self.target.rotation_y += 40 * dt
 
-        if self.screenshot_left is not None:  # hold the start view until it's saved
+        if self.screenshot_left is not None:  # hold the view until it's saved
             self.screenshot_left -= dt
             if self.screenshot_left <= 0:
                 self._save_screenshot()
                 self.screenshot_left = None
+                if self.options.survey_headings:
+                    self._next_survey_view()
             return
 
         if self.banner_left > 0:
@@ -444,13 +454,32 @@ class TestbedGame:
             self.mouse_look.release()
         self.u.application.quit()
 
+    def _next_survey_view(self) -> None:
+        """Survey mode: turn to the next heading and shoot it; after the last one, move on
+        to the next seed (no clock, no outcome, no input)."""
+        assert self.state is not None
+        if self.survey_queue:
+            heading = self.survey_queue.pop(0)
+            self.state = PlayerState(self.state.x, self.state.z, heading)
+            self._sync_view()
+            self.screenshot_left = SURVEY_SETTLE_SECONDS
+            return
+        self.episode_index += 1
+        if self.episode_index >= self.options.episodes:
+            self._quit()
+            return
+        self._start_episode()
+
     def _save_screenshot(self) -> None:
         from panda3d.core import Filename
 
         directory = self.options.screenshot_dir
-        assert directory is not None and self.episode is not None
+        assert directory is not None and self.episode is not None and self.state is not None
         directory.mkdir(parents=True, exist_ok=True)
         layout = self.episode.layout
-        path = directory / f"level{layout.level}-seed{layout.seed}.png"
+        name = f"level{layout.level}-seed{layout.seed}"
+        if self.options.survey_headings:
+            name += f"-h{round(self.state.heading) % 360:03d}"
+        path = directory / f"{name}.png"
         self.app.win.saveScreenshot(Filename.fromOsSpecific(str(path)))
         print(f"screenshot {path}", flush=True)
