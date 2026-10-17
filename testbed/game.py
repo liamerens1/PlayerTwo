@@ -305,6 +305,7 @@ class TestbedGame:
             self.screenshot_left = SCREENSHOT_DELAY_SECONDS
         n = self.options.survey_headings
         self.survey_queue = [layout.start_heading + i * 360.0 / n for i in range(1, n)] if n else []
+        self._discard_mouse()  # every episode starts facing its own start heading
         self._sync_view()
         logger.info("episode %d: level %d seed %d", self.episode_index + 1, layout.level, seed)
 
@@ -339,6 +340,12 @@ class TestbedGame:
         dt = min(u.time.dt, 0.1)
         assert self.episode is not None and self.state is not None
         self.target.rotation_y += 40 * dt
+
+        if self.screenshot_left is not None or self.banner_left > 0 or self.fall_left > 0:
+            # Not playing right now: drop any mouse movement. Before this, turns made
+            # during the SUCCESS / TIME UP banner piled up and were applied all at once
+            # when the next episode started, so it began facing the wrong way.
+            self._discard_mouse()
 
         if self.screenshot_left is not None:  # hold the view until it's saved
             self.screenshot_left -= dt
@@ -400,6 +407,13 @@ class TestbedGame:
                 self.overlay_text.scale = 3
             return False  # skip this frame's mouse delta: the pointer was just centred
         return focused
+
+    def _discard_mouse(self) -> None:
+        """Re-centre the cursor, throwing away whatever it moved (only while it's ours)."""
+        if self.options.autopilot or self.mouse_look is None or not self.had_focus:
+            return
+        if self._focused():
+            self.mouse_look.take_dx()
 
     def _set_mouse_captured(self, captured: bool) -> None:
         from panda3d.core import WindowProperties
