@@ -8,9 +8,11 @@ PlayerTwo captures the screen, hands each frame to a vision model running on you
 (via [Ollama](https://ollama.com)), gets back one action, and performs it. No cloud, no
 fees: everything runs on your machine.
 
-> **Status:** Phases 0–4 done. PlayerTwo plays its own test game: with qwen3-vl 2B it
-> reaches a target straight ahead 20/20 times, but finds one that starts off-screen only
-> 1/20. Next is Phase 5 (bigger models); the first real game is Phase 8. See the [roadmap](docs/roadmap.md), the single source of
+> **Status:** Phases 0–5 done. PlayerTwo plays its own test game: every model tried
+> (Qwen3-VL 2B and 4B, Qwen2.5-VL 7B) reaches a target straight ahead nearly every time,
+> but finds one that starts off-screen only 1–2 times in 20. Yet asked only *where* the
+> target is, the 2B gets it right 99% of the time, so Phase 6 lets the model look and
+> plain code steer. The first real game is Phase 9. See the [roadmap](docs/roadmap.md), the single source of
 > truth for direction.
 
 ## How it works
@@ -120,7 +122,8 @@ TIME UP, then a new position (seeded: `--seed`, so runs repeat). It closes after
 `--episodes` (default 20) and writes one JSON line per episode to
 `testbed\results\<timestamp>.jsonl`. The clock pauses while its window isn't focused.
 `--autopilot` lets a built-in path follower play (a demo; it reads the level's layout,
-sees nothing and sends no input).
+sees nothing and sends no input). `--survey 24 --screenshots DIR` doesn't play at all: it
+photographs each start position from 24 headings, for testing what a model can see.
 
 To let PlayerTwo play it, start PlayerTwo first, then the testbed:
 
@@ -135,6 +138,22 @@ title. Score the results with:
 ```bat
 python scripts\score_testbed.py --all
 ```
+
+### Comparing models on the testbed
+
+`scripts\run_testbed_matrix.py` runs every combination of models, levels and memory
+on/off, one after another, and writes a comparison table (success rate, median time,
+decision time, decisions per minute, peak GPU memory) to
+`testbed\results\matrix-<timestamp>.md`:
+
+```bat
+ollama pull qwen3-vl:4b-instruct
+python scripts\run_testbed_matrix.py --models qwen3-vl:2b-instruct qwen3-vl:4b-instruct --levels 1 2
+```
+
+It sends real input to the testbed window, so it waits for Enter before each run; click
+the testbed window when it opens and leave the mouse alone. F12 stops PlayerTwo.
+`python -m playertwo --model NAME` and `--stats-json PATH` do the same for a single run.
 
 ## Development
 

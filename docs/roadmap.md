@@ -15,8 +15,8 @@ marked _(proposed)_ haven't been agreed yet; confirm them before the phase start
 | Tier | What                                                                   | Phase    |
 | ---- | ---------------------------------------------------------------------- | -------- |
 | 1    | Short-term memory: recent decisions carried into the next prompt.      | 4        |
-| 2    | Lessons journal: one-line lessons per game, learned from failures.     | 7        |
-| 3    | Imitation learning: fine-tune a small vision model on recorded play.   | 10       |
+| 2    | Lessons journal: one-line lessons per game, learned from failures.     | 8        |
+| 3    | Imitation learning: fine-tune a small vision model on recorded play.   | 11       |
 | 4    | Reinforcement learning.                                                | Parked   |
 
 ---
@@ -108,9 +108,47 @@ marked _(proposed)_ haven't been agreed yet; confirm them before the phase start
 - **Done bar:** for each model, testbed **success rate per level**, **decisions/s**, and
   **VRAM used while a game is running**, recorded side by side, and a default model
   chosen from them.
-- **Status:** ⏭ next.
+- **Status:** ✅ done. **Default model stays `qwen3-vl:2b-instruct`:** the bigger models
+  score the same on the testbed, are slower and leave less VRAM for a game. Testbed,
+  act-then-look, seeds 1–20, VRAM next to the testbed (8,192 MiB card):
 
-### 6. Optimise — `feat/optimize/6`
+  | Model                | L1 mem on | L1 mem off | L2         | Decision | Peak GPU  |
+  | -------------------- | --------- | ---------- | ---------- | -------- | --------- |
+  | qwen3-vl:2b-instruct | 20/20     | 20/20      | 1/20, 1/20 | ~0.7 s   | ~4.3 GB   |
+  | qwen3-vl:4b-instruct | 19/20\*   | 20/20      | 2/20 (on)  | ~0.83 s  | ~5.8 GB   |
+  | qwen2.5vl:7b         | 19/20\*   | 20/20      | 1/20 (off) | ~1.05 s  | ~7.7 GB   |
+
+  \*Episode 1 lost to cold-start time-outs, since fixed. Bigger models don't fix level 2:
+  every model sees the cube but picks the wrong turn (→ Phase 6). The 7B leaves no room
+  for a real game. Built: `--model`, `--stats-json`, `scripts/run_testbed_matrix.py`
+  (models × levels × memory, one table with peak GPU memory), validated CLI overrides,
+  `loop.max_decision_age_seconds` 1.5 → 5 s, a warm-up that makes one throwaway
+  decision, and `brain.host` 127.0.0.1 (Windows "localhost" cost about 2 s per new
+  connection).
+
+### 6. Look, then steer — `feat/look-steer/6`
+
+- **Goal:** split seeing from acting. The model answers only "is the target visible, and
+  where is it on screen?"; plain code turns that into the profile's actions (search
+  towards where it was last seen, turn towards it, walk when it's centred). The target
+  and the action mapping live in the profile (`target:`), so the code stays
+  game-agnostic. Falls back to the model picking the action when stuck (walls).
+  1. Offline perception test (no input): testbed frames graded against the yellow pixels;
+     visible/not-visible accuracy, position error, false sightings and latency per model
+     and per way of asking (native box, left/centre/right, 0-100 x).
+  2. Build: profile `target:`, `GameModel.locate()`, a pure steering module, loop switch.
+  3. Measure on the testbed against "model picks the action".
+- **Done bar** _(proposed)_: level 2 success rate with look-then-steer measured for each
+  model against the Phase 4/5 baseline (about 5%), same seeds; levels 3–5 measured too.
+- **Status:** ⏭ next. Added 2026-10-17 (Liam, option A) after level 2 showed the
+  models see the cube but pick the wrong turn. **Step 1 done** (testbed `--survey`, 153
+  frames graded on the yellow pixels): asked for a box as JSON, qwen3-vl 2B gets
+  visible/not visible right 152/153 with no false sightings and the steering side right
+  102/103, position error under 1% of the width, 0.61 s; 4B is as accurate at 0.87 s.
+  Asking left/centre/right is much worse (41 false sightings for 2B). qwen2.5vl's boxes
+  use a different coordinate space (about 1,200 px wide). Step 2 uses 2B + box JSON.
+
+### 7. Optimise — `feat/optimize/7`
 
 - **Goal:** frame size, change detection, action persistence (keep a key held while
   the next decision repeats it: with act-then-look the character currently walks 0.8 s,
@@ -120,7 +158,7 @@ marked _(proposed)_ haven't been agreed yet; confirm them before the phase start
 - **Status:** planned. Known lever: image tokens are about 70% of decision time
   (0.38 of 0.56 s at 640 px).
 
-### 7. Lessons journal (Tier 2) — `feat/lessons/7`
+### 8. Lessons journal (Tier 2) — `feat/lessons/8`
 
 - **Goal:** detect deaths and failures, write one-line lessons per game, and feed them
   into the prompt. Testbed deaths are the first signal.
@@ -128,7 +166,7 @@ marked _(proposed)_ haven't been agreed yet; confirm them before the phase start
   accumulate.
 - **Status:** planned.
 
-### 8. First real game — `feat/first-game/8`
+### 9. First real game — `feat/first-game/9`
 
 - **Goal:** a profile and prompt iteration for **A Short Hike** (fallback:
   **SuperTuxKart**). Offline, single-player, no anti-cheat.
@@ -136,23 +174,23 @@ marked _(proposed)_ haven't been agreed yet; confirm them before the phase start
   attempts. The goal and target rate are agreed when the phase starts.
 - **Status:** planned.
 
-### 9. Recording — `feat/recording/9`
+### 10. Recording — `feat/recording/10`
 
 - **Goal:** record frame + human input pairs while Liam plays.
 - **Done bar** _(proposed)_: a documented dataset format; frames and inputs time-aligned
-  and replayable; enough hours recorded for Phase 10 (amount agreed then).
+  and replayable; enough hours recorded for Phase 11 (amount agreed then).
 - **Status:** planned.
 
-### 10. Imitation learning (Tier 3) — `feat/imitation/10`
+### 11. Imitation learning (Tier 3) — `feat/imitation/11`
 
-- **Goal:** LoRA fine-tune a small vision model on the Phase 9 recordings.
+- **Goal:** LoRA fine-tune a small vision model on the Phase 10 recordings.
 - **Done bar** _(proposed)_: the fine-tuned model beats the prompt-only model's testbed
   success rate at equal or better decisions/s.
 - **Status:** planned.
 
 ---
 
-## Game ladder (after Phase 10)
+## Game ladder (after Phase 11)
 
 From light to heavy, as VRAM allows next to the model:
 
