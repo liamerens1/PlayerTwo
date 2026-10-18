@@ -29,6 +29,10 @@ class BrainSettings(_Section):
     max_consecutive_failures: int = Field(default=5, ge=1, le=1000)
     """This many bad replies or failed calls in a row stop the loop (BrainUnavailableError)."""
     keep_alive: str = "30m"
+    box_scale: float = Field(default=1000.0, gt=0)
+    """Look, then steer: the model's bounding-box coordinates are divided by this to get
+    fractions of the frame. Qwen3-VL reports boxes on a 0-1000 grid (measured in Phase 6).
+    Qwen2.5-VL uses a size-dependent pixel space instead and isn't supported for steering."""
 
     @field_validator("model")
     @classmethod
@@ -95,6 +99,9 @@ class LoopSettings(_Section):
     settle_seconds: float = Field(default=0.15, ge=0, le=2)
     """Wait this long after an action before looking at the screen again, so the game
     has drawn its effect."""
+    steer: bool = True
+    """Look, then steer, for profiles with a `target:`: the model only locates the target
+    and steering code picks the action. Off (or no target): the model picks the action."""
 
 
 class MemorySettings(_Section):

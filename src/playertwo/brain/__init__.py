@@ -6,8 +6,10 @@ from playertwo.brain.prompt import (
     FRAME_PROMPT,
     REASON_MAX_CHARS,
     build_frame_prompt,
+    build_locate_prompt,
     build_system_prompt,
     decision_schema,
+    locate_schema,
 )
 
 __all__ = [
@@ -18,7 +20,9 @@ __all__ = [
     "InferenceStats",
     "OllamaVisionModel",
     "build_frame_prompt",
+    "build_locate_prompt",
     "build_system_prompt",
     "decision_schema",
     "encode_jpeg",
+    "locate_schema",
 ]

@@ -8,11 +8,11 @@ PlayerTwo captures the screen, hands each frame to a vision model running on you
 (via [Ollama](https://ollama.com)), gets back one action, and performs it. No cloud, no
 fees: everything runs on your machine.
 
-> **Status:** Phases 0–5 done. PlayerTwo plays its own test game: every model tried
-> (Qwen3-VL 2B and 4B, Qwen2.5-VL 7B) reaches a target straight ahead nearly every time,
-> but finds one that starts off-screen only 1–2 times in 20. Yet asked only *where* the
-> target is, the 2B gets it right 99% of the time, so Phase 6 lets the model look and
-> plain code steer. The first real game is Phase 9. See the [roadmap](docs/roadmap.md), the single source of
+> **Status:** Phases 0–6 done. PlayerTwo plays its own test game with a 2B vision
+> model: it **looks** (the model says where the target is) and **steers** (plain code turns
+> and walks). That reaches a target that starts off-screen 20/20 times (1/20 when the
+> model picked keys itself), gets round walls and obstacles 18–19/20, but still walks into
+> pits. The first real game is Phase 9. See the [roadmap](docs/roadmap.md), the single source of
 > truth for direction.
 
 ## How it works
@@ -94,6 +94,9 @@ python -m playertwo --target-process game.exe
 - `--profile profiles\testbed.yaml` picks a game profile; `--no-memory` turns off
   short-term memory (the model's last few actions in each prompt, and a hint when it
   keeps repeating an action that does nothing).
+- If the profile has a `target:` (the testbed's does), PlayerTwo **looks, then steers**:
+  the model only says where the target is on screen, and PlayerTwo turns towards it or
+  walks at it. `--no-steer` lets the model pick every action itself instead.
 - To set the target permanently, put it in `safety.target_process` in
   `config/config.yaml`.
 

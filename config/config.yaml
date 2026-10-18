@@ -12,6 +12,8 @@ brain:
   warm_up_timeout_seconds: 120  # first load of the model; 4B/7B models can take a while cold
   max_consecutive_failures: 5 # this many bad replies / failed calls in a row stop PlayerTwo
   keep_alive: 30m             # how long Ollama keeps the model loaded between calls
+  box_scale: 1000             # look-then-steer box coordinates: 1000 for Qwen3-VL,
+                              # 1205 for qwen2.5vl (pixels of a ~1205-wide image)
 
 capture:
   width: 640                  # frames are downscaled to this width before the model sees them

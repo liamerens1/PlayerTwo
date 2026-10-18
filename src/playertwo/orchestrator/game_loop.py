@@ -6,13 +6,15 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from playertwo.actions import Decision, GameProfile, WaitAction
+from playertwo.actions import Decision, GameProfile, Sighting, WaitAction
 from playertwo.brain import GameModel
 from playertwo.capture import ChangeDetector, FrameSource, frame_difference
 from playertwo.config import LoopSettings, MemorySettings
 from playertwo.hands import ActionExecutor
 from playertwo.memory import ShortTermMemory
 from playertwo.orchestrator.latest import Current, Latest
+from playertwo.orchestrator.trace import Tracer
+from playertwo.steering import Steerer
 from playertwo.types import Frame
 
 logger = logging.getLogger(__name__)
@@ -55,6 +57,10 @@ class LoopStats:
     """Time capture and brain sat idle because the game wasn't focused."""
     stuck_hints: int = 0
     """Decisions made with the stuck detector's hint in the prompt."""
+    steered: int = 0
+    """Decisions made by look-then-steer (the rest were the model picking the action)."""
+    target_seen: int = 0
+    """Of those, how many times the model said the target was visible."""
 
 
 def _always_focused() -> bool:
@@ -96,6 +102,7 @@ class GameLoop:
         republish_seconds: float,
         memory: MemorySettings | None = None,
         focused: Callable[[], bool] = _always_focused,
+        tracer: Tracer | None = None,
     ) -> None:
         self._source = source
         self._detector = detector
@@ -108,6 +115,7 @@ class GameLoop:
         self._republish_seconds = republish_seconds
         self._memory_settings = memory if memory is not None else MemorySettings(enabled=False)
         self._focused = focused
+        self._tracer = tracer
         self._frames: Latest[TimedFrame] = Latest()
         self._decisions: Latest[TimedDecision] = Latest()
         self._screen: Current[TimedFrame] = Current()
@@ -117,6 +125,9 @@ class GameLoop:
         """When the last action finished settling (written by hands, read by brain)."""
         self._failure: BaseException | None = None
         self._failure_lock = threading.Lock()
+        target = profile.target
+        self._target = target if settings.steer and model.can_locate else None
+        self._steerer = Steerer(self._target) if self._target is not None else None
         self.memory: ShortTermMemory | None = (
             ShortTermMemory(self._memory_settings.size, self._memory_settings.stuck_repeats)
             if self._memory_settings.enabled
@@ -222,13 +233,43 @@ class GameLoop:
             if timed is None or not self._focused():
                 continue
             history = self.memory.snapshot() if self.memory is not None else None
-            if history is not None and history.stuck_action is not None:
+            stuck = history is not None and history.stuck_action is not None
+            if stuck:
+                assert history is not None
                 self.stats.stuck_hints += 1
                 logger.debug("stuck hint: %s x%d", history.stuck_action, history.stuck_repeats)
-            decision = self._model.decide(timed.frame, self._profile, history)
+            sighting: Sighting | None = None
+            steerer, target = self._steerer, self._target
+            # Look, then steer. When stuck (e.g. walking into a wall) steering detours
+            # sideways if the profile can strafe; otherwise the model picks the action,
+            # with the stuck hint, until something changes.
+            steering = (
+                steerer is not None and target is not None and (not stuck or steerer.can_detour)
+            )
+            asked_model = True
+            if steering and steerer is not None and target is not None:
+                asked_model = steerer.needs_look(stuck)
+                if asked_model:
+                    sighting = self._model.locate(timed.frame, target)
+                    self.stats.target_seen += sighting is not None and sighting.visible
+                decision = steerer.decide(sighting, stuck=stuck)
+                self.stats.steered += 1
+            else:
+                decision = self._model.decide(timed.frame, self._profile, history)
             self.stats.decisions += 1
-            if self._model.last_stats is not None:
-                self.stats.decide_seconds.append(self._model.last_stats.total_seconds)
+            model_seconds = None
+            if self._model.last_stats is not None and asked_model:
+                model_seconds = self._model.last_stats.total_seconds
+                self.stats.decide_seconds.append(model_seconds)
+            if self._tracer is not None:
+                self._tracer.record(
+                    timed.frame,
+                    decision,
+                    mode="steer" if steering else "pick",
+                    sighting=sighting,
+                    model_seconds=model_seconds,
+                    stuck=stuck,
+                )
             if self._settings.wait_for_result:
                 self._result_ready.clear()  # before the hand-off, so hands' set() can't be lost
             self._decisions.put(TimedDecision(decision, timed.captured_at))

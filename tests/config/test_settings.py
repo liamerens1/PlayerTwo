@@ -62,10 +62,18 @@ def test_shipped_config_and_profiles_are_valid() -> None:
     settings = Settings.load(root / "config" / "config.yaml")
     assert settings.memory.enabled
     testbed = GameProfile.load(root / "profiles" / "testbed.yaml")
-    assert set(testbed.action_names) == {"move_forward", "turn_left", "turn_right", "wait"}
+    # The model picks from the same four actions as before steering existed; the nudges
+    # are steering-only, so "model picks" runs stay comparable with Phases 4 and 5.
+    assert testbed.model_action_names == ["move_forward", "turn_left", "turn_right", "wait"]
+    assert set(testbed.action_names) - set(testbed.model_action_names) == {
+        "nudge_left",
+        "nudge_right",
+        "strafe_left",
+        "strafe_right",
+    }
     walker = GameProfile.load(root / "profiles" / "simple-walker.yaml")
     # Same bindings, so a decision means the same input in both.
-    for name in testbed.action_names:
+    for name in testbed.model_action_names:
         assert testbed.actions[name] == walker.actions[name].model_copy(
             update={"description": testbed.actions[name].description}
         )

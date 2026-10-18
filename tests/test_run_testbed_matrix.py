@@ -60,6 +60,7 @@ def test_matrix_table_row() -> None:
         "qwen2.5vl:7b",
         "2",
         "off",
+        "pick",
         "2/4",
         "10.0 s",
         "1",
@@ -81,3 +82,11 @@ def test_matrix_row_without_report_or_gpu() -> None:
     )
     row = matrix.format_matrix([outcome]).splitlines()[-1]
     assert "0/1" in row and row.count("| - ") >= 4
+
+
+def test_steer_dimension() -> None:
+    combos = matrix.plan(["a:2b"], [2], "off", "both")
+    assert [c.steer for c in combos] == [True, False]
+    steer = matrix.Combo("qwen3-vl:2b-instruct", 2, False, True)
+    assert steer.tag == "qwen3-vl:2b-instruct L2 mem-off steer"
+    assert steer.slug.endswith("-l2-mem-off-steer")

@@ -3,6 +3,7 @@ import io
 import json
 import logging
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -10,7 +11,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from playertwo.actions import GameProfile, History, PastAction
+from playertwo.actions import GameProfile, History, PastAction, Sighting
 from playertwo.brain import (
     FRAME_PROMPT,
     BrainUnavailableError,
@@ -18,6 +19,7 @@ from playertwo.brain import (
     build_frame_prompt,
     build_system_prompt,
     encode_jpeg,
+    locate_schema,
 )
 from playertwo.config import BrainSettings
 from playertwo.types import Frame
@@ -263,7 +265,7 @@ def test_consecutive_failures_raise_after_the_limit(profile: GameProfile) -> Non
     )
     assert model.decide(_frame(), profile).action == "wait"
     assert model.decide(_frame(), profile).action == "wait"
-    with pytest.raises(BrainUnavailableError, match=r"3 decisions in a row failed.*cuda oom"):
+    with pytest.raises(BrainUnavailableError, match=r"3 model calls in a row failed.*cuda oom"):
         model.decide(_frame(), profile)
 
 
@@ -301,3 +303,90 @@ def test_unload_sets_keep_alive_to_zero() -> None:
 def test_unload_never_raises(handler: Handler) -> None:
     model, _ = _model(handler)
     model.unload()
+
+
+# 5. Look, then steer: locate
+
+
+def _testbed() -> GameProfile:
+    return GameProfile.load(Path(__file__).resolve().parents[2] / "profiles" / "testbed.yaml")
+
+
+def test_locate_asks_only_where_the_target_is() -> None:
+    target = _testbed().target
+    assert target is not None
+    model, fake = _model(lambda _: _reply('{"visible": false, "box": [0, 0, 0, 0]}'))
+    model.locate(_frame(), target)
+    (sent,) = fake.requests
+    assert "the yellow cube" in sent["prompt"]
+    assert "system" not in sent or not sent["system"]  # no action list: it only looks
+    assert sent["format"] == locate_schema()
+    assert len(sent["images"]) == 1
+
+
+def test_locate_turns_a_0_to_1000_box_into_fractions() -> None:
+    # A real qwen3-vl 2B reply from the Phase 6 perception test; the true centre was 0.47.
+    target = _testbed().target
+    assert target is not None
+    model, _ = _model(lambda _: _reply('{ "visible": true, "box": [384, 175, 556, 442] }'))
+    sighting = model.locate(_frame(), target)
+    assert sighting is not None and sighting.visible
+    assert sighting.x == pytest.approx(0.47)
+    assert sighting.box == pytest.approx((0.384, 0.175, 0.556, 0.442))
+    assert model.last_stats is not None
+
+
+def test_locate_box_corners_in_any_order_and_out_of_range_are_tidied() -> None:
+    target = _testbed().target
+    assert target is not None
+    model, _ = _model(lambda _: _reply('{"visible": true, "box": [1200, 500, 900, 100]}'))
+    sighting = model.locate(_frame(), target)
+    assert sighting is not None
+    assert sighting.box == pytest.approx((0.9, 0.1, 1.0, 0.5))
+
+
+def test_not_visible_is_a_sighting_not_a_failure() -> None:
+    target = _testbed().target
+    assert target is not None
+    model, _ = _model(lambda _: _reply('{"visible": false, "box": [0, 0, 999, 999]}'))
+    assert model.locate(_frame(), target) == Sighting(visible=False)
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        "not json",
+        '{"visible": true}',
+        '{"visible": true, "box": [1, 2, 3]}',
+        '{"visible": true, "box": [500, 100, 500, 300]}',  # no width
+    ],
+)
+def test_unusable_locate_replies_give_none(reply: str) -> None:
+    target = _testbed().target
+    assert target is not None
+    model, _ = _model(lambda _: _reply(reply))
+    assert model.locate(_frame(), target) is None
+
+
+def test_locate_failures_count_towards_the_limit() -> None:
+    target = _testbed().target
+    assert target is not None
+    model, _ = _model(_raises(httpx.ReadTimeout), max_consecutive_failures=2)
+    assert model.locate(_frame(), target) is None
+    with pytest.raises(BrainUnavailableError, match="2 model calls in a row failed"):
+        model.locate(_frame(), target)
+
+
+def test_locate_with_a_missing_model_is_unavailable() -> None:
+    target = _testbed().target
+    assert target is not None
+    model, _ = _model(lambda _: httpx.Response(404, json={"error": "model not found"}))
+    with pytest.raises(BrainUnavailableError, match="not installed"):
+        model.locate(_frame(), target)
+
+
+def test_warm_up_with_a_target_also_warms_locate() -> None:
+    model, fake = _model(lambda _: _reply('{"visible": false, "box": [0, 0, 0, 0]}'))
+    model.warm_up(_testbed())
+    assert len(fake.requests) == 2
+    assert fake.requests[1]["format"] == locate_schema()

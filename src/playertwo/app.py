@@ -14,7 +14,7 @@ from playertwo.brain import BrainUnavailableError, OllamaVisionModel
 from playertwo.capture import ChangeDetector, DxcamFrameSource, TargetWindow
 from playertwo.config import Settings
 from playertwo.hands import ActionExecutor, DirectInputDriver
-from playertwo.orchestrator import GameLoop, LoopStats, RunReport
+from playertwo.orchestrator import GameLoop, LoopStats, RunReport, Tracer
 from playertwo.safety import KillSwitch, SafetyGate, WindowGuard
 
 logger = logging.getLogger("playertwo")
@@ -52,12 +52,22 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         help="turn off short-term memory (the model's recent actions in the prompt)",
     )
     parser.add_argument(
+        "--no-steer",
+        action="store_true",
+        help="ignore the profile's target: the model picks every action itself",
+    )
+    parser.add_argument(
         "--model", help="Ollama model to use, e.g. qwen3-vl:4b-instruct (overrides brain.model)"
     )
     parser.add_argument(
         "--max-seconds",
         type=float,
         help="stop automatically after this many seconds (in addition to the kill switch)",
+    )
+    parser.add_argument(
+        "--trace",
+        type=Path,
+        help="save every frame the model looked at, with what it saw and did, in this folder",
     )
     parser.add_argument(
         "--stats-json",
@@ -77,6 +87,8 @@ def _with_overrides(settings: Settings, args: argparse.Namespace) -> Settings:
         data["memory"]["enabled"] = False
     if args.model is not None:
         data["brain"]["model"] = args.model
+    if args.no_steer:
+        data["loop"]["steer"] = False
     return Settings.model_validate(data)
 
 
@@ -94,9 +106,10 @@ def main(argv: list[str] | None = None) -> int:
     logging.getLogger("httpx").setLevel(max(logging.WARNING, logging.root.level))
 
     memory = "on" if settings.memory.enabled else "off"
+    steer = "on" if profile.target is not None and settings.loop.steer else "off"
     print(
         f"Config OK  model={settings.brain.model}  capture={settings.capture.width}px  "
-        f"memory={memory}"
+        f"memory={memory}  steer={steer}"
     )
     print(f"Profile OK {profile.name}: {', '.join(profile.action_names)}")
     if args.check:
@@ -113,7 +126,7 @@ def main(argv: list[str] | None = None) -> int:
             "PlayerTwo only sends input to that window."
         )
         return EXIT_NO_TARGET
-    return _play(settings, profile, guard, args.max_seconds, args.stats_json)
+    return _play(settings, profile, guard, args.max_seconds, args.stats_json, args.trace)
 
 
 def _play(
@@ -122,6 +135,7 @@ def _play(
     guard: WindowGuard,
     max_seconds: float | None,
     stats_json: Path | None = None,
+    trace: Path | None = None,
 ) -> int:
     stop = threading.Event()
     model = OllamaVisionModel(settings.brain)
@@ -165,6 +179,7 @@ def _play(
             republish_seconds=settings.capture.republish_seconds,
             memory=settings.memory,
             focused=guard.game_is_focused,
+            tracer=Tracer(trace) if trace is not None else None,
         )
 
         kill_switch.arm()
@@ -177,7 +192,10 @@ def _play(
         ).start()
         key = settings.safety.kill_switch.upper()
         memory = "on" if settings.memory.enabled else "off"
-        print(f"Playing in: {guard.describe()}. Press {key} to stop. Short-term memory {memory}.")
+        steering = profile.target is not None and settings.loop.steer and model.can_locate
+        mode = "look, then steer" if steering else "the model picks each action"
+        print(f"Playing in: {guard.describe()}. Press {key} to stop.")
+        print(f"Mode: {mode}. Short-term memory {memory}.")
         print("Input is only sent while that window is focused; alt-tab out to pause.")
         started = time.monotonic()
         loop.run()
@@ -209,6 +227,7 @@ def _play(
                 profile=profile.name,
                 memory=settings.memory.enabled,
                 act_then_look=settings.loop.wait_for_result,
+                steer=profile.target is not None and settings.loop.steer and model.can_locate,
                 seconds=ended - started,
                 exit_code=exit_code,
             )
@@ -240,5 +259,6 @@ def _summary(stats: LoopStats) -> str:
         f"(skipped {stats.frames_skipped}), decisions {stats.decisions} ({latency}), "
         f"performed {stats.actions_performed}, dropped: stale {stats.dropped_stale}, "
         f"window not focused {stats.dropped_by_gate}, superseded {stats.decisions_skipped}; "
-        f"paused {stats.paused_seconds:.0f} s, stuck hints {stats.stuck_hints}"
+        f"paused {stats.paused_seconds:.0f} s, stuck hints {stats.stuck_hints}, "
+        f"steered {stats.steered} (target seen {stats.target_seen})"
     )

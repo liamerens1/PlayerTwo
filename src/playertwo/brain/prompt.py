@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from playertwo.actions import GameProfile, History
+from playertwo.actions import GameProfile, History, SteerTarget
 
 FRAME_PROMPT = "This is the current screenshot. Choose the next action."
 REASON_MAX_CHARS = 80
@@ -12,9 +12,11 @@ REASON_MAX_CHARS = 80
 def build_system_prompt(profile: GameProfile) -> str:
     """The model only ever sees the actions the active profile allows."""
     action_lines = "\n".join(
-        f"- {name}: {spec.description or spec.type}" for name, spec in profile.actions.items()
+        f"- {name}: {spec.description or spec.type}"
+        for name, spec in profile.actions.items()
+        if spec.for_model
     )
-    names = " | ".join(f'"{name}"' for name in profile.action_names)
+    names = " | ".join(f'"{name}"' for name in profile.model_action_names)
     return (
         f"You control a character in a {profile.game_type} by looking at screenshots.\n"
         f"Goal: {profile.goal}\n\n"
@@ -57,8 +59,31 @@ def decision_schema(profile: GameProfile) -> dict[str, Any]:
     return {
         "type": "object",
         "properties": {
-            "action": {"type": "string", "enum": profile.action_names},
+            "action": {"type": "string", "enum": profile.model_action_names},
             "reason": {"type": "string", "maxLength": REASON_MAX_CHARS},
         },
         "required": ["action", "reason"],
+    }
+
+
+def build_locate_prompt(target: SteerTarget) -> str:
+    """Look, then steer: ask only where the target is. Chosen by the Phase 6 perception
+    test: a box in a fixed JSON shape beat asking "left, centre or right" (which made the
+    2B see targets that weren't there) and a free-form box (it boxed the player instead
+    when the target was off-screen)."""
+    return (
+        f"Is {target.description} visible in this image? "
+        "If yes, give its bounding box [x1, y1, x2, y2]."
+    )
+
+
+def locate_schema() -> dict[str, Any]:
+    """JSON schema for a locate reply: visible, plus a 4-number box."""
+    return {
+        "type": "object",
+        "properties": {
+            "visible": {"type": "boolean"},
+            "box": {"type": "array", "items": {"type": "number"}, "minItems": 4, "maxItems": 4},
+        },
+        "required": ["visible", "box"],
     }

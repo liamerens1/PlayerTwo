@@ -3,7 +3,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from playertwo.actions import Decision, GameProfile, History
+from playertwo.actions import Decision, GameProfile, History, Sighting, SteerTarget
 from playertwo.types import Frame
 
 
@@ -31,7 +31,11 @@ class GameModel(ABC):
     """Takes a frame and the active profile, returns one validated decision."""
 
     last_stats: InferenceStats | None = None
-    """Timing of the most recent `decide` call, if the adapter measures it."""
+    """Timing of the most recent `decide` or `locate` call, if the adapter measures it."""
+
+    can_locate: bool = False
+    """Whether `locate` works. Without it, a profile's `target` is ignored and the model
+    picks the action itself."""
 
     @abstractmethod
     def decide(
@@ -43,6 +47,12 @@ class GameModel(ABC):
         Must never raise for a bad model reply: return Decision.wait() instead. May raise
         BrainUnavailableError when the model can't be reached or isn't installed.
         """
+
+    def locate(self, frame: Frame, target: SteerTarget) -> Sighting | None:
+        """Look, then steer: where is `target` in `frame`? None if the model couldn't
+        answer (a bad reply or failed call), which is not the same as "not visible".
+        May raise BrainUnavailableError like `decide`. Only called if `can_locate`."""
+        raise NotImplementedError(f"{type(self).__name__} can't locate targets")
 
     def warm_up(self, profile: GameProfile | None = None) -> None:  # noqa: B027 - optional hook
         """Load the model ahead of the first decision, ideally doing one throwaway

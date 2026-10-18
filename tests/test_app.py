@@ -93,3 +93,12 @@ def test_model_override_is_shown_and_validated(capsys: pytest.CaptureFixture[str
     # Overrides go through the same validation as the config file: no cloud models.
     assert main(["--check", "--model", "qwen3-vl:235b-cloud"]) == EXIT_INVALID_CONFIG
     assert "not a local model" in capsys.readouterr().out
+
+
+def test_steering_is_on_for_a_profile_with_a_target(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["--check", "--profile", "profiles/testbed.yaml"]) == EXIT_OK
+    assert "steer=on" in capsys.readouterr().out
+    assert main(["--check", "--profile", "profiles/testbed.yaml", "--no-steer"]) == EXIT_OK
+    assert "steer=off" in capsys.readouterr().out
+    assert main(["--check"]) == EXIT_OK  # simple-walker has no target
+    assert "steer=off" in capsys.readouterr().out

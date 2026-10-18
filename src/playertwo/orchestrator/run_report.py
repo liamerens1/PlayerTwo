@@ -21,6 +21,8 @@ class RunReport(BaseModel):
     profile: str
     memory: bool
     act_then_look: bool
+    steer: bool = False
+    """Look, then steer: the model located the target and code picked the actions."""
     seconds: float
     """Wall-clock time the loop ran."""
     active_seconds: float
@@ -34,6 +36,8 @@ class RunReport(BaseModel):
     dropped_stale: int
     dropped_by_gate: int
     stuck_hints: int
+    steered: int = 0
+    target_seen: int = 0
     exit_code: int
 
     @classmethod
@@ -46,6 +50,7 @@ class RunReport(BaseModel):
         memory: bool,
         act_then_look: bool,
         seconds: float,
+        steer: bool = False,
         exit_code: int,
     ) -> "RunReport":
         active = max(0.0, seconds - stats.paused_seconds)
@@ -55,6 +60,7 @@ class RunReport(BaseModel):
             profile=profile,
             memory=memory,
             act_then_look=act_then_look,
+            steer=steer,
             seconds=round(seconds, 2),
             active_seconds=round(active, 2),
             decisions=stats.decisions,
@@ -65,5 +71,7 @@ class RunReport(BaseModel):
             dropped_stale=stats.dropped_stale,
             dropped_by_gate=stats.dropped_by_gate,
             stuck_hints=stats.stuck_hints,
+            steered=stats.steered,
+            target_seen=stats.target_seen,
             exit_code=exit_code,
         )

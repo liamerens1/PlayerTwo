@@ -55,6 +55,27 @@ Only performed actions are recorded: dropped (stale, unfocused) ones never happe
 types (`History`, `PastAction`) live in `actions`, so the brain reads them without
 depending on the orchestrator.
 
+## Look, then steer (Phase 6)
+
+Picking a key is harder for a small model than seeing. On the testbed every model found
+the cube straight ahead, but picked the wrong turn when it started off-screen (level 2:
+about 1 in 20), while asked only for a bounding box the 2B located it about 99% of the
+time. So a profile can declare a **`target:`** (what to look for, and which of its
+actions mean forward, turn left and turn right). Then the brain only answers
+`locate(frame, target)` → `Sighting(visible, x, box)`, and the pure `playertwo.steering`
+module picks the action:
+
+- not visible → turn towards the side it was last seen on (or the profile's `search`);
+- left or right of a centre band (`centre_width`, wider than one turn) → turn that way;
+- in the band → forward;
+- the model couldn't answer → wait (never treated as "not visible").
+
+If the stuck detector fires (e.g. walking into a wall), the model picks the action itself
+with the stuck hint until the screen changes. `--no-steer` (or `loop.steer: false`)
+switches back to the model picking every action. Model-specific parts stay in `brain/`:
+the locate prompt and schema, and `brain.box_scale` (Qwen3-VL reports boxes on a 0–1000
+grid).
+
 ## The testbed
 
 `testbed/` is a small Ursina game made for measuring PlayerTwo: reach the yellow cube,
